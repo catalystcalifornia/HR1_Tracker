@@ -18,7 +18,7 @@ library(readr)
 source("W:\\RDA Team\\R\\credentials_source.R")
 
 con <- connect_to_db("eqb_hr1_tracker")
-con2<-connect_to_db("rda_shared_data")
+con_shared<-connect_to_db("rda_shared_data")
 drv <- dbDriver("PostgreSQL")
 
 
@@ -93,15 +93,21 @@ aid_category_dict<-data_list[["by_aid_category_certified_eligibles_data_dictiona
 delivery_df<-data_list[["by_delivery_system_and_plan_certified_eligibles"]]
 delivery_dict<-data_list[["by_delivery_system_and_plan_certified_eligibles_data_dictionary"]]
 
-# Dual status
+# Dual status and age
 
-dual_df<-data_list[["by_medicare_dual_status_and_age_group_certified_eligibles"]]
-dual_dict<-data_list[["by_medicare_dual_status_and_age_group_certified_eligibles_data_dictionary"]]
+dual_age_df<-data_list[["by_medicare_dual_status_and_age_group_certified_eligibles"]]
+dual_age_dict<-data_list[["by_medicare_dual_status_and_age_group_certified_eligibles_data_dictionary"]]
+
+# Dual status 
+
+dual_df<-data_list[["by_medicare_dual_status_certified_eligibles"]]
+dual_dict<-data_list[["by_medicare_dual_status_certified_eligibles_data_dictionary"]]
+
 
 # Race and age
 
-race_age_df<-data_list[["by_age_group_and_sex_certified_eligibles"]]
-race_age_dict<-data_list[["by_age_group_and_sex_certified_eligibles_data_dictionary"]]
+race_age_df<-data_list[["by_race_ethnicity_and_age_group_certified_eligibles"]]
+race_age_dict<-data_list[["by_race_ethnicity_and_age_group_certified_eligibles_data_dictionary"]]
 
 # Language spoken
 
@@ -111,6 +117,7 @@ lang_dict<-data_list[["by_primary_language_certified_eligibles_data_dictionary"]
 # aid code reference files --I don't really see these codes used in any of the dataframes
 aid_ref<-data_list[["reference_medi_cal_aid_codes_and_aid_code_groups"]]
 aid_ref_dict<-data_list[["reference_medi_cal_aid_codes_and_aid_code_groups_data_dictionary"]]
+
 
 # Clean up all the column names across each of these dfs
 
@@ -130,13 +137,78 @@ for (df_name in df_names) {
   assign(df_name, df)
 }
 
-# Push each of these tables to postgres:
+# Push each of these tables to rda_shared_data.health in postgres--------------------
 
-# make sure no trailing spaces anywhere
+# Rename all tables to how I want them to be named in postgres
 
-names(df) <- gsub(" ", "", names(df))
+cchs_medical_eligibles_age_sex_county_2010_26<-age_sex_df
+cchs_medical_eligibles_aid_cat_county_2010_26<-aid_category_df
+cchs_medical_eligibles_delivery_system_county_2010_26<-delivery_df
+cchs_medical_eligibles_dual_coverage_age_county_2010_26<-dual_age_df
+cchs_medical_eligibles_dual_coverage_county_2010_26<-dual_df
+cchs_medical_eligibles_race_age_county_2010_26<-race_age_df
+cchs_medical_eligibles_language_county_2010_26<-lang_df
 
-df[df == " "] <- ""
+# Use loop to push all data frames to postgres at once
+
+df_names <- ls(pattern = "^cchs_")
+
+# check that worked
+print(df_names) # good
+
+# Set PostgreSQL schema
+schema <- "health"
+
+# Set table comment info:
+source<-"https://data.chhs.ca.gov/dataset/medi-cal-certified-eligibles-with-demographics-by-month"
+QA<-"W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_medical_data_import.docx"
+
+# Loop through each dataframe
+for (df_name in df_names) {
+  
+  # Get dataframe
+  df <- get(df_name)
+  
+  # Use dataframe name as PostgreSQL table name
+  table_name <- df_name
+  
+  # make sure no trailing spaces anywhere
+  
+  names(df) <- gsub(" ", "", names(df))
+  
+  df[df == " "] <- ""
+  
+  
+  # Push dataframe to PostgreSQL
+  dbWriteTable(
+    con_shared,
+    DBI::Id(schema = schema, table = table_name),
+    df,
+    overwrite = TRUE,
+    row.names = FALSE
+  )
+  
+  message("Uploaded: ", schema, ".", table_name)
+  
+  # Add table comments
+  table_comment <- paste0(
+    "QA doc: ",QA," | ",
+    table_name,
+    " | Source: ",source)
+  
+  
+  # Add PostgreSQL table comment
+  sql <- paste0(
+    "COMMENT ON TABLE ",
+    as.character(dbQuoteIdentifier(con_shared, DBI::Id(schema = schema, table = table_name))),
+    " IS ",
+    as.character(dbQuoteString(con_shared, table_comment))
+  )
+  
+  dbExecute(con_shared, sql)
+  
+}
+
 
 # set column types
 
