@@ -49,34 +49,133 @@ data_list <- set_names(
 # Check names of imported csv files --all the csv files got read in- good
 names(data_list)
 # 
-# [1] "archived_by_aid_category_certified_eligibles_data_dictionary"             
-# [2] "archived_by_aid_category_certified_eligibles"                             
+# [1] "archived_by_aid_category_certified_eligibles_data_dictionary"             --OK to excluse since it is archived
+# [2] "archived_by_aid_category_certified_eligibles"                             --OK to excluse since it is archived
+
 # [3] "by_age_group_and_sex_certified_eligibles_data_dictionary"                 
 # [4] "by_age_group_and_sex_certified_eligibles"                                 
+
 # [5] "by_aid_category_certified_eligibles_data_dictionary"                      
-# [6] "by_aid_category_certified_eligibles"                                      
+# [6] "by_aid_category_certified_eligibles"                                      ---of interest
+
 # [7] "by_delivery_system_and_plan_certified_eligibles_data_dictionary"          
 # [8] "by_delivery_system_and_plan_certified_eligibles"                          
-# [9] "by_medicare_dual_status_and_age_group_certified_eligibles_data_dictionary"
+
+# [9] "by_medicare_dual_status_and_age_group_certified_eligibles_data_dictionary" 
 # [10] "by_medicare_dual_status_and_age_group_certified_eligibles"                
+
 # [11] "by_medicare_dual_status_certified_eligibles_data_dictionary"              
 # [12] "by_medicare_dual_status_certified_eligibles"                              
-# [13] "by_primary_language_certified_eligibles_data_dictionary"                  
-# [14] "by_primary_language_certified_eligibles"                                  
-# [15] "by_race_ethnicity_and_age_group_certified_eligibles_data_dictionary"      
-# [16] "by_race_ethnicity_and_age_group_certified_eligibles"                      
-# [17] "reference_medi_cal_aid_codes_and_aid_code_groups_data_dictionary"         
+
+# [13] "by_primary_language_certified_eligibles_data_dictionary"                ---of interest  
+# [14] "by_primary_language_certified_eligibles"                                --of interest  
+
+# [15] "by_race_ethnicity_and_age_group_certified_eligibles_data_dictionary"   ---of interest   
+# [16] "by_race_ethnicity_and_age_group_certified_eligibles"                    ---of interest  
+
+# [17] "reference_medi_cal_aid_codes_and_aid_code_groups_data_dictionary"       
 # [18] "reference_medi_cal_aid_codes_and_aid_code_groups"       
 
-# Lets pull out initial tables of interest as dfs for my R environment
+# Lets pull out all the tables as dfs for my R environment and push all of them to rda_shared_data even if only some are of most interest for the HR 1 tracker
+
+# Age Sex
+
+age_sex_df<-data_list[["by_age_group_and_sex_certified_eligibles"]]
+age_sex_dict<-data_list[["by_aid_category_certified_eligibles_data_dictionary"]]
 
 # Aid category: 
 
 aid_category_df<-data_list[["by_aid_category_certified_eligibles"]]
 aid_category_dict<-data_list[["by_aid_category_certified_eligibles_data_dictionary"]]
 
+# Delivery system
+
+delivery_df<-data_list[["by_delivery_system_and_plan_certified_eligibles"]]
+delivery_dict<-data_list[["by_delivery_system_and_plan_certified_eligibles_data_dictionary"]]
+
+# Dual status
+
+dual_df<-data_list[["by_medicare_dual_status_and_age_group_certified_eligibles"]]
+dual_dict<-data_list[["by_medicare_dual_status_and_age_group_certified_eligibles_data_dictionary"]]
 
 # Race and age
 
 race_age_df<-data_list[["by_age_group_and_sex_certified_eligibles"]]
 race_age_dict<-data_list[["by_age_group_and_sex_certified_eligibles_data_dictionary"]]
+
+# Language spoken
+
+lang_df<-data_list[["by_primary_language_certified_eligibles"]]
+lang_dict<-data_list[["by_primary_language_certified_eligibles_data_dictionary"]]
+
+# aid code reference files --I don't really see these codes used in any of the dataframes
+aid_ref<-data_list[["reference_medi_cal_aid_codes_and_aid_code_groups"]]
+aid_ref_dict<-data_list[["reference_medi_cal_aid_codes_and_aid_code_groups_data_dictionary"]]
+
+# Clean up all the column names across each of these dfs
+
+# Find all dataframe names ending in _df
+df_names <- ls(pattern = "_df$")
+
+for (df_name in df_names) {
+  
+  df <- get(df_name)
+  
+  names(df) <- names(df) %>%
+    gsub("-", "_", x = .) %>%
+    gsub(" ", "_", x = .) %>%
+    gsub("\\.", "_", x = .) %>%
+    tolower()
+  
+  assign(df_name, df)
+}
+
+# Push each of these tables to postgres:
+
+# make sure no trailing spaces anywhere
+
+names(df) <- gsub(" ", "", names(df))
+
+df[df == " "] <- ""
+
+# set column types
+
+charvect = rep("numeric", ncol(df)) #create vector that is "varchar" for the number of columns in df
+
+charvect <- replace(charvect, c(1, 2), c("varchar"))
+
+# add df colnames to the character vector
+
+names(charvect) <- colnames(df)
+
+table_name <- "rates_rentburden"
+schema <- "data"
+indicator <- "Rent Burden by LA County tracts"
+source <- "R script: W:\\Project\\ECI\\MLAW\\R\\rates_rentburden.R"
+qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rates_houseburden.docx"
+table_comment <- paste0(indicator, source)
+
+# push to postgres
+
+dbWriteTable(con,  table_name, df,
+             overwrite = TRUE, row.names = FALSE,
+             field.types = charvect)
+
+# add meta data
+
+column_names <- colnames(df) # Get column names
+
+column_comments <- c(
+  'indicator ID number',
+  'tract',
+  'Total renter occupied housing units (denominator)',
+  'Total renter occupied housing units MOE',
+  'Total renter occupied housing units that are rent burdened. This is defined as spending 50% or more of total income on rent',
+  'Total renter occupied housing units that are rent burdened MOE',
+  'Total renter occupied housing units that are rent burdened CV',
+  'Percentage of renter occupied units that are rent burdened out of total renter occupied units by tract',
+  'MOE of the percentage of renter occupied units that are rent burdened',
+  'CV of the percentage of renter occupied units that are rent burdened',
+  'Percent rank of the estimate rentburden_rate')
+
+add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
