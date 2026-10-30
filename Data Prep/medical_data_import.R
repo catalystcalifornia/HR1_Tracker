@@ -210,56 +210,74 @@ for (df_name in df_names) {
 }
 
 
+#### Medi-Cal SB 75 age 0-19 + 19-65 enrollment: documented + undocumented folks ####
+
+# read in youth 0-19 table: only 1 csv file
+# URL: https://data.chhs.ca.gov/dataset/sb-75-full-scope-medi-cal-for-all-children-enrollment 
+
+youth_raw<-read.csv("W:\\Project\\ECI\\HR 1 Tracker\\Data\\MediCal\\sb-75-full-scope-medi-cal-for-all-children-enrollment-urcxncax\\sb-75-full-scope-medi-cal-for-all-children-enrollment.csv")
+
+# Clean column names
+colnames(youth_raw) <- colnames(youth_raw) %>%
+  str_to_lower() %>%
+  str_replace_all("[. ]+", "_")
+
+youth_df<-youth_raw%>%
+  mutate(age_group="age0_19")%>% # add column for age group designation
+mutate(number_of_beneficiaries=as.numeric(number_of_beneficiaries))
+
+# side by side compare youth_raw to youth_df make sure they still match after some cleanup, looks good. 
+
+###### Push Youth expansion table (age 0-19) to postgres ######
+
+# make sure no trailing spaces anywhere
+
+names(youth_df) <- gsub(" ", "", names(youth_df))
+
+youth_df[youth_df == " "] <- ""
+
 # set column types
 
-charvect = rep("numeric", ncol(df)) #create vector that is "varchar" for the number of columns in df
+charvect = rep("varchar", ncol(youth_df)) #create vector that is "varchar" for the number of columns in df
 
-charvect <- replace(charvect, c(1, 2), c("varchar"))
+charvect <- replace(charvect, c(3), c("numeric"))
 
 # add df colnames to the character vector
 
-names(charvect) <- colnames(df)
+names(charvect) <- colnames(youth_df)
 
-table_name <- "rates_rentburden"
-schema <- "data"
-indicator <- "Rent Burden by LA County tracts"
-source <- "R script: W:\\Project\\ECI\\MLAW\\R\\rates_rentburden.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rates_houseburden.docx"
+table_name <- "cchs_medical_expansion_age0_19_2016_26"
+schema <- "health"
+indicator <- "This dataset includes the monthly count of individuals under age 19 receiving full scope Medi-Cal benefits as authorized by California Welfare and Institutions Code 14007.8. The count reflects the total number eligible during the month. California provides full scope Medi-Cal benefits to all children under the age of 19 regardless of immigration status. This program is referred to as SB 75 and was implemented May 16, 2016 pursuant to SB 75 (Chapter 18, Statutes of 2015), Section 14007.8 and added to the Welfare and Institutions Code and amended by SB 4 (Chapter 709, Statutes of 2015)."
+source <- "R script: W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Data Prep\\medical_data_import.R"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_medical_data_import.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
 
-dbWriteTable(con,  table_name, df,
+dbWriteTable(con_shared,  
+             DBI::Id(schema = schema, table = table_name),
+             youth_df,
              overwrite = TRUE, row.names = FALSE,
              field.types = charvect)
 
 # add meta data
 
-column_names <- colnames(df) # Get column names
+column_names <- colnames(youth_df) # Get column names
 
 column_comments <- c(
-  'indicator ID number',
-  'tract',
-  'Total renter occupied housing units (denominator)',
-  'Total renter occupied housing units MOE',
-  'Total renter occupied housing units that are rent burdened. This is defined as spending 50% or more of total income on rent',
-  'Total renter occupied housing units that are rent burdened MOE',
-  'Total renter occupied housing units that are rent burdened CV',
-  'Percentage of renter occupied units that are rent burdened out of total renter occupied units by tract',
-  'MOE of the percentage of renter occupied units that are rent burdened',
-  'CV of the percentage of renter occupied units that are rent burdened',
-  'Percent rank of the estimate rentburden_rate')
+  'eligibility date',
+  'county',
+  'total number of beneficiaries',
+  'annotation code',
+  'annotation code description',
+  'age group')
 
-add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+add_table_comments(con_shared, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
-
-#### Medi-Cal SB 75 age 0-19 + 19-65 enrollment: documented + undocumented folks ####
-
-# read in youth 0-19 table: only 1 csv flie
-
-youth_df<-read.csv("W:\\Project\\ECI\\HR 1 Tracker\\Data\\MediCal\\sb-75-full-scope-medi-cal-for-all-children-enrollment-urcxncax\\sb-75-full-scope-medi-cal-for-all-children-enrollment.csv")
 
 # read in the adult files: multiple csv files
+# URL: https://data.chhs.ca.gov/dataset/medi-cal-adult-expansion 
 
 folder <- "W:\\Project\\ECI\\HR 1 Tracker\\Data\\MediCal\\medi-cal-adult-expansion-ptrvpz8j"
 
@@ -290,7 +308,7 @@ data_list <- imap(data_list, ~ .x %>%
                     mutate(
                       age_group = case_when(
                         str_starts(.y, "young_ae_19_25") ~ "19_25",
-                        str_starts(.y, "age_26_29_ae_population") ~ "26_29",
+                        str_starts(.y, "age_26_49_ae_population") ~ "26_49",
                         str_starts(.y, "older_ae_50_and_over") ~ "50_over",
                         TRUE ~ NA_character_
                       )
@@ -329,5 +347,88 @@ for (df_name in df_names) {
 }
 
 # skimming my R environment table names look better now
+
+# Combine all the eligible totals only tables into one combined table with all age groups
+
+age19_50_plus_total<-rbind(young_ae_19_25_population_county_df, age_26_49_ae_population_county_df,
+                           older_ae_50_over_population_county_df)
+
+
+# make sure it looks good -yes
+View(age19_50_plus_total)
+
+# rename tables for uploading to postgres:
+
+cchs_medical_expansion_age19_50plus_2020_26<-age19_50_plus_total
+
+# separate tables for the age26-49 pop with different demographic cuts
+
+cchs_medical_expansion_age26_49_race_2020_26<-age_26_49_ae_population_ethnicity_county_df
+cchs_medical_expansion_age26_49_spokenlang_2020_26<-age_26_49_ae_population_spoken_language_county_df
+cchs_medical_expansion_age26_49_writtenlang_2020_26<-age_26_49_ae_population_written_language_county_df
+
+###### Push all 4  Medi-Cal 19-50+ age expansion tables to postgres ######
+
+# For the adult expansion tables: Use loop to push all data frames to postgres at once
+
+df_names <- ls(pattern = "^cchs_medical_expansion")
+
+# check that worked
+print(df_names) # good
+
+# Set PostgreSQL schema
+schema <- "health"
+
+# Set table comment info:
+source<-"https://data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
+QA<-"W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_medical_data_import.docx"
+description<-"Age 19-25 Young Adult Expansion Population: The datasets include the monthly count of individuals ages 19 through 25, by county, receiving full scope Medi-Cal benefits. The counts reflect the total number of eligible individuals enrolled during the month. California provides full scope Medi-Cal benefits to young adults ages 19 through 25, regardless of immigration status. Lawfully present individuals ages 21 through 25, who are not in a pregnancy aid code, are included in this count. Individuals in the dataset are eligible for federal financial participation for their emergency and pregnancy-related services. The Young Adult Expansion program was implemented January 1, 2020, pursuant to Senate Bill 104 (Chapter 67, Statutes of 2019), California Welfare and Institutions Code Section 14007.8. Age 26-49 Adult Expansion Population: The datasets include the monthly count of individuals 26-49 years of age, by county, receiving full scope Medi-Cal benefits. The counts reflect the total number of eligible individuals enrolled during the month. California provides full scope Medi-Cal benefits to adults 26-49 years of age, regardless of immigration status. Lawfully present individuals 26-49 years of age, who are not in a pregnancy aid code, are included in this count. Individuals in the dataset are eligible for federal financial participation for their emergency and pregnancy-related services. The Age 26-49 Adult Expansion program was implemented January 1, 2024, pursuant to Senate Bill (SB) 184 (Chapter 47, Statutes of 2022), California Welfare and Institutions Code Section 14007.8. Age 50 and over Older Adult Expansion Population: The datasets include the monthly count of individuals 50 years of age or older, by county, receiving full scope Medi-Cal benefits. The counts reflect the total number of eligible individuals enrolled during the month. California provides full scope Medi-Cal benefits to adults 50 years of age or older, regardless of immigration status. Lawfully present individuals 50 years of age or older, who are not in a pregnancy aid code, are included in this count. Individuals in the dataset are eligible for federal financial participation for their emergency and pregnancy-related services. The Older Adult Expansion program was implemented May 1, 2022, pursuant to Assembly Bill (AB) 133 (Chapter 143, Statutes of 2021), California Welfare and Institutions Code Section 14007.8."
+  
+
+# Loop through each dataframe
+for (df_name in df_names) {
+  
+  # Get dataframe
+  df <- get(df_name)
+  
+  # Use dataframe name as PostgreSQL table name
+  table_name <- df_name
+  
+  # make sure no trailing spaces anywhere
+  
+  names(df) <- gsub(" ", "", names(df))
+  
+  df[df == " "] <- ""
+  
+  
+  # Push dataframe to PostgreSQL
+  dbWriteTable(
+    con_shared,
+    DBI::Id(schema = schema, table = table_name),
+    df,
+    overwrite = TRUE,
+    row.names = FALSE
+  )
+  
+  message("Uploaded: ", schema, ".", table_name)
+  
+  # Add table comments
+  table_comment <- paste0(
+    "QA doc: ",QA," | ",
+    table_name,
+    " | Source: ",source," ",description)
+  
+  
+  # Add PostgreSQL table comment
+  sql <- paste0(
+    "COMMENT ON TABLE ",
+    as.character(dbQuoteIdentifier(con_shared, DBI::Id(schema = schema, table = table_name))),
+    " IS ",
+    as.character(dbQuoteString(con_shared, table_comment))
+  )
+  
+  dbExecute(con_shared, sql)
+  
+}
 
 
