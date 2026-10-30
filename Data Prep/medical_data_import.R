@@ -22,7 +22,7 @@ con_shared<-connect_to_db("rda_shared_data")
 drv <- dbDriver("PostgreSQL")
 
 
-# Read in Medi-Cal monthly total enrollment data-------------------------------
+# Medi-Cal monthly total enrollment data-------------------------------
 
 #### Medi-Cal Certified Eligibles Data by Month with Demographics ####
 
@@ -137,7 +137,7 @@ for (df_name in df_names) {
   assign(df_name, df)
 }
 
-# Push each of these tables to rda_shared_data.health in postgres--------------------
+###### Push each of these tables to rda_shared_data.health in postgres ######
 
 # Rename all tables to how I want them to be named in postgres
 
@@ -251,3 +251,83 @@ column_comments <- c(
   'Percent rank of the estimate rentburden_rate')
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+
+
+#### Medi-Cal SB 75 age 0-19 + 19-65 enrollment: documented + undocumented folks ####
+
+# read in youth 0-19 table: only 1 csv flie
+
+youth_df<-read.csv("W:\\Project\\ECI\\HR 1 Tracker\\Data\\MediCal\\sb-75-full-scope-medi-cal-for-all-children-enrollment-urcxncax\\sb-75-full-scope-medi-cal-for-all-children-enrollment.csv")
+
+# read in the adult files: multiple csv files
+
+folder <- "W:\\Project\\ECI\\HR 1 Tracker\\Data\\MediCal\\medi-cal-adult-expansion-ptrvpz8j"
+
+# Find all csv files in the folder
+files <- list.files(
+  path = folder,
+  pattern = "\\.csv?$",
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+# Read each CSV into a separate dataframe within a list
+data_list <- set_names(
+  map(files, read_csv),
+  tools::file_path_sans_ext(basename(files)) %>%
+    str_replace_all("-", "_")%>% # clean up the csv flie names by replacing the dashes - with _ to make filenames more R friendly
+    { if_else(
+      str_detect(., "_dictionary"),
+      .,
+      str_c(., "_df"))}) # add a _df to the end of all the item names to make it easier to do group data frame clean up actions
+
+# Check names of imported csv files --all the csv files got read in- good
+names(data_list)
+
+# For each of these list items I want to create a column called 'age_group' where I populate it with the corresponding age the data table has data for
+
+data_list <- imap(data_list, ~ .x %>%
+                    mutate(
+                      age_group = case_when(
+                        str_starts(.y, "young_ae_19_25") ~ "19_25",
+                        str_starts(.y, "age_26_29_ae_population") ~ "26_29",
+                        str_starts(.y, "older_ae_50_and_over") ~ "50_over",
+                        TRUE ~ NA_character_
+                      )
+                    )
+)
+
+
+# add all these list items as dataframes in my R environment
+
+list2env(data_list, envir = .GlobalEnv)
+
+# continue cleaning up all of these table names and column names 
+
+# Get all dataframe names ending in _df
+df_names <- ls(pattern = "_df$")
+
+for (df_name in df_names) {
+  df <- get(df_name)
+  
+  # Clean column names
+  colnames(df) <- colnames(df) %>%
+    str_to_lower() %>%
+    str_replace_all("[. ]+", "_")
+  
+  # Remove _and_ and _by_ to shorten table names
+  new_name <- df_name %>%
+    str_replace_all("_(and|by)_", "_")
+  
+  # Save dataframe with updated name
+  assign(new_name, df, envir = .GlobalEnv)
+  
+  # Remove original if name changed
+  if (new_name != df_name) {
+    rm(list = df_name, envir = .GlobalEnv)
+  }
+}
+
+# skimming my R environment table names look better now
+
+
