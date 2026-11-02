@@ -209,6 +209,43 @@ for (df_name in df_names) {
   
 }
 
+# Now create loop to add table comments to each table. Using the column name as the comment because column names are self explanatory
+
+for (df_name in df_names) {
+  
+  # Get dataframe
+  df <- get(df_name)
+  
+  # PostgreSQL table name
+  table_name <- df_name
+  
+  # Get column names
+  column_names <- colnames(df)
+  
+  # Use column names as comments
+  column_comments <- gsub("_", " ", column_names)
+  
+  # Add comments to each column
+  for (i in seq_along(column_names)) {
+    
+    sql <- paste0(
+      "COMMENT ON COLUMN ",
+      as.character(dbQuoteIdentifier(
+        con_shared,
+        DBI::Id(schema = schema, table = table_name)
+      )),
+      ".",
+      as.character(dbQuoteIdentifier(con_shared, column_names[i])),
+      " IS ",
+      as.character(dbQuoteString(con_shared, column_comments[i]))
+    )
+    
+    dbExecute(con_shared, sql)
+  }
+  
+  message("Added column comments to: ", schema, ".", table_name)
+}
+
 
 #### Medi-Cal SB 75 age 0-19 + 19-65 enrollment: documented + undocumented folks ####
 
@@ -429,6 +466,42 @@ for (df_name in df_names) {
   
   dbExecute(con_shared, sql)
   
+}
+
+# Now create loop to add column name comments to each column. Using just the column name itself as comment because they are self explanatory
+for (df_name in df_names) {
+  
+  # Get dataframe
+  df <- get(df_name)
+  
+  # PostgreSQL table name
+  table_name <- df_name
+  
+  # Get column names
+  column_names <- colnames(df)
+  
+  # Use column names as comments
+  column_comments <- gsub("_", " ", column_names)
+  
+  # Add comments to each column
+  for (i in seq_along(column_names)) {
+    
+    sql <- paste0(
+      "COMMENT ON COLUMN ",
+      as.character(dbQuoteIdentifier(
+        con_shared,
+        DBI::Id(schema = schema, table = table_name)
+      )),
+      ".",
+      as.character(dbQuoteIdentifier(con_shared, column_names[i])),
+      " IS ",
+      as.character(dbQuoteString(con_shared, column_comments[i]))
+    )
+    
+    dbExecute(con_shared, sql)
+  }
+  
+  message("Added column comments to: ", schema, ".", table_name)
 }
 
 
