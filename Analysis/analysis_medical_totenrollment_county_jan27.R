@@ -133,4 +133,29 @@ ggplot(total_enrollment_june25,
 
 ######  Medi-Cal enrollment by aid category ######
 
+# Lets stick with June 2025 as the base and compare to---> June 2026 
+
+aid_enrollment_june25<- medical_aid_raw %>%
+  filter(month_of_eligibility %in% c("2026-06", "2025-06")) %>%
+  group_by(month_of_eligibility, county, aid_category) %>%
+  summarise(
+    count = sum(total_eligibles, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(month_of_eligibility, county) %>%
+  mutate(total = sum(count)) %>%
+  ungroup()%>%
+  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
+  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
+  group_by(county, aid_category)%>%
+  mutate(june25_june26_pct_change=(count_2026_06-count_2025_06)/count_2025_06*100
+  )
+
+# export this as a xlsx file:
+write.xlsx(aid_enrollment_june25,
+           file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_aid_june25_june26.xlsx", overwrite = TRUE)
+
+##### TEST: format for one mega analysis table ######
+
+# using:  aid_enrollment_june25 & total_enrollment_june25
 
