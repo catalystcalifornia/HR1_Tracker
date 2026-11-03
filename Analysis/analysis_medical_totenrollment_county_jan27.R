@@ -13,6 +13,7 @@ library(rpostgis)
 library(purrr)
 library(readr)
 library(ggplot2)
+library(openxlsx)
 
 # Connect to postgres
 
@@ -74,6 +75,11 @@ total_enrollment_june25<-medical_race_raw%>%
   mutate(june25_june26_pct_change=(enrollment_2026_06-enrollment_2025_06)/enrollment_2025_06*100
          )
 
+# export this as a xlsx file:
+write.xlsx(total_enrollment_june25,
+file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_june25_june26.xlsx", overwrite = TRUE)
+
+
 # quick visual: June 2025 --> June 2026
 
 ggplot(total_enrollment_june25,
@@ -91,7 +97,7 @@ ggplot(total_enrollment_june25,
     axis.text.x = element_text(angle = 90, hjust = 1)
   )
 
-# Repeat for July 2025 ---> July 2026
+# Repeat for July 2025 ---> July 2026: very similar to June 2025-June 2026 so we could go with either
 
 # Lets start with June 2025 as the base and compare to---> June 2026 
 
@@ -127,6 +133,4 @@ ggplot(total_enrollment_june25,
 
 ######  Medi-Cal enrollment by aid category ######
 
-# pull out the aid categories to share with EQB
 
-table(medical_aid_raw$aid_category)
