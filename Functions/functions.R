@@ -11,9 +11,9 @@ library(readr)
 
 
 
-# Race recoding function ------------------------
+# Medi-Cal data race recoding function ------------------------
 
-race_recode_fx<-function(){
+medical_race_re<-function(){
   
   
   
