@@ -30,6 +30,14 @@ medical_aid_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_eligi
 medical_race_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_eligibles_race_age_county_2010_26")
 medical_lang_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_eligibles_language_county_2010_26")
 
+# Read in california counties using tigris so I can join to my relational table: 
+
+ca_counties <- counties(
+  state = "CA",
+  year = 2026,
+  cb = FALSE
+)
+
 # Data exploration------------------------
 
 # I want to understand if the sub categories within each of these tables adds to a 'total' universe of people enrolled in MediCal
@@ -71,9 +79,13 @@ total_enrollment_june25<-medical_race_raw%>%
   ungroup()%>%
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  rename_with(~ paste0("enrollment_", .x), .cols = 2:3) %>%group_by(county)%>%
-  mutate(june25_june26_pct_change=(enrollment_2026_06-enrollment_2025_06)/enrollment_2025_06*100
-         )
+  rename_with(~ paste0("medical_enrollment_", .x), .cols = 2:3) %>%group_by(county)%>%
+  mutate(medical_enrollment_pct_change=(medical_enrollment_2026_06-medical_enrollment_2025_06)/medical_enrollment_2025_06*100)%>%
+  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
+  mutate(geolevel="county")%>%
+  rename("county_name"="county",
+         "county_geoid"="GEOID")%>%
+  select(county_name, geolevel, medical_enrollment_2025_06,medical_enrollment_2026_06, medical_enrollment_pct_change, geometry)
 
 # export this as a xlsx file:
 write.xlsx(total_enrollment_june25,
@@ -108,16 +120,16 @@ total_enrollment_july25<-medical_race_raw%>%
   ungroup()%>%
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  rename_with(~ paste0("enrollment_", .x), .cols = 2:3) %>%
+  rename_with(~ paste0("medical_enrollment_", .x), .cols = 2:3) %>%
   group_by(county)%>%
-  mutate(july25_july26_pct_change=(enrollment_2026_07-enrollment_2025_07)/enrollment_2025_07*100
+  mutate(medical_enrollment_pct_change=(medical_enrollment_2026_07-medical_enrollment_2025_07)/medical_enrollment_2025_07*100
   )
 
 
 # quick visual: July 2025 --> July 2026
 
 ggplot(total_enrollment_june25,
-       aes(x = county, y = june25_june26_pct_change)) +
+       aes(x = county, y = medical_enrollment_pct_change)) +
   geom_col(fill = "darkblue") +
   geom_hline(yintercept = 0, color = "black") +
   labs(
@@ -130,32 +142,6 @@ ggplot(total_enrollment_june25,
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1)
   )
-
-######  Medi-Cal enrollment by aid category ######
-
-# I feel like this one is probably more for the grants but won't be on the dashboard. OK to keep in long format?
-
-# Lets stick with June 2025 as the base and compare to---> June 2026 
-
-aid_enrollment_june25<- medical_aid_raw %>%
-  filter(month_of_eligibility %in% c("2026-06", "2025-06")) %>%
-  group_by(month_of_eligibility, county, aid_category) %>%
-  summarise(
-    count = sum(total_eligibles, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  group_by(month_of_eligibility, county) %>%
-  mutate(total = sum(count)) %>%
-  ungroup()%>%
-  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
-  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  group_by(county, aid_category)%>%
-  mutate(june25_june26_pct_change=(count_2026_06-count_2025_06)/count_2025_06*100
-  )
-
-# export this as a xlsx file:
-write.xlsx(aid_enrollment_june25,
-           file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_aid_june25_june26.xlsx", overwrite = TRUE)
 
 
 
@@ -188,7 +174,31 @@ race_enrollment_june25<- medical_race_raw %>%
 
 
 
-##### TEST: format for one mega analysis table ######
+# Analysis tables (not for dashboard)?-------------------------------------
 
-# using:  aid_enrollment_june25 & total_enrollment_june25
+######  Medi-Cal enrollment by aid category ######
+
+# I feel like this one is probably more for the grants but won't be on the dashboard. OK to keep in long format?
+
+# Lets stick with June 2025 as the base and compare to---> June 2026 
+
+aid_enrollment_june25<- medical_aid_raw %>%
+  filter(month_of_eligibility %in% c("2026-06", "2025-06")) %>%
+  group_by(month_of_eligibility, county, aid_category) %>%
+  summarise(
+    count = sum(total_eligibles, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(month_of_eligibility, county) %>%
+  mutate(total = sum(count)) %>%
+  ungroup()%>%
+  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
+  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
+  group_by(county, aid_category)%>%
+  mutate(june25_june26_pct_change=(count_2026_06-count_2025_06)/count_2025_06*100)
+
+
+# export this as a xlsx file:
+write.xlsx(aid_enrollment_june25,
+           file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_aid_june25_june26.xlsx", overwrite = TRUE)
 
