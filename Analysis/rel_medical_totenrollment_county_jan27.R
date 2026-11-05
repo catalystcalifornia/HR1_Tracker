@@ -86,7 +86,14 @@ total_enrollment_june25<-medical_race_raw%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
          "county_geoid"="GEOID")%>%
-  select(county_name, geolevel, medical_enrollment_2025_06,medical_enrollment_2026_06, medical_enrollment_pct_change, geometry)
+  select(county_geoid, county_name, geolevel, everything()) %>%
+  st_as_sf(sf_column_name = "geometry") # I want to preserve the spatial column
+
+# check resulting table is a spatial df -- good
+class(total_enrollment_june25)
+
+# view as map
+mapview(total_enrollment_june25) # good
 
 # export this as a xlsx file:
 write.xlsx(total_enrollment_june25,
@@ -109,41 +116,6 @@ ggplot(total_enrollment_june25,
   theme(
     axis.text.x = element_text(angle = 90, hjust = 1)
   )
-
-# Repeat for July 2025 ---> July 2026: very similar to June 2025-June 2026 so we could go with either
-
-# Lets start with June 2025 as the base and compare to---> June 2026 
-
-total_enrollment_july25<-medical_race_raw%>%
-  filter(month_of_eligibility=="2026-07" | month_of_eligibility=="2025-07")%>%
-  group_by(month_of_eligibility, county)%>%
-  summarise(total=sum(total_eligibles))%>%
-  ungroup()%>%
-  pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
-  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  rename_with(~ paste0("medical_enrollment_", .x), .cols = 2:3) %>%
-  group_by(county)%>%
-  mutate(medical_enrollment_pct_change=(medical_enrollment_2026_07-medical_enrollment_2025_07)/medical_enrollment_2025_07*100
-  )
-
-
-# quick visual: July 2025 --> July 2026
-
-ggplot(total_enrollment_june25,
-       aes(x = county, y = medical_enrollment_pct_change)) +
-  geom_col(fill = "darkblue") +
-  geom_hline(yintercept = 0, color = "black") +
-  labs(
-    title = "Percent Change in Medi-Cal Enrollment by County",
-    subtitle = "July 2025 to July 2026",
-    x = "County",
-    y = "Percent Change (%)"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1)
-  )
-
 
 
 ######  Medi-Cal enrollment by race  ######
@@ -204,6 +176,56 @@ check<-race_enrollment_june25%>%
   select(latinx_qa, latinx_pct_change)
 
 rm(check)
+
+
+# left join county geoms to get county_geoid values and clean up columns to match naming conventions
+
+race_enrollment_june25<-race_enrollment_june25%>%
+  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
+  mutate(geolevel="county")%>%
+  rename("county_name"="county",
+         "county_geoid"="GEOID")%>%
+  select(county_geoid, county_name, geolevel, everything())%>%
+  st_as_sf(sf_column_name = "geometry") # I want to preserve the spatial column
+
+# check resulting table is a spatial df -- good
+class(race_enrollment_june25)
+
+# view as map
+mapview(race_enrollment_june25) # good
+
+
+###### IMMIGRANT enrollment in Medi-Cal ######
+
+# We have 2 'proxies' for this we could use:
+# 1) language 
+# 2) Medi-Cal expansion data? 
+
+
+
+
+
+
+
+
+
+
+
+
+###### Combine medi-cal total enrollment and by race tables into one wide table ######
+
+medical_enrollment<-total_enrollment_june25%>%
+  left_join(
+    race_enrollment_june25 %>% st_drop_geometry(),
+    by = "county_geoid" ) %>%
+  relocate(geometry, .after = last_col())
+
+# check class-- good
+class(medical_enrollment)
+
+#map
+mapview(medical_enrollment)
+
 
 # Analysis tables (not for dashboard)?-------------------------------------
 
