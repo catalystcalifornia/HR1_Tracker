@@ -14,6 +14,7 @@ library(purrr)
 library(readr)
 library(ggplot2)
 library(openxlsx)
+library(mapview)
 
 # Connect to postgres
 
@@ -158,21 +159,51 @@ race_enrollment_june25<- medical_race_raw %>%
   group_by(month_of_eligibility, county) %>%
   mutate(total = sum(count)) %>%
   ungroup()%>%
-  mutate(ethnicity_re=ifelse(ethnicity %in% "AI/AN", "aian",
-                                    ifelse(ethnicity %in% "ASIAN", "asian",
-                                           ifelse(ethnicity %in% "BLACK", "black",
+  # NOTE I am still researching whether or not these ethnicity categories are not inclusive of Latinx. No definitive answer yet. 
+  
+  mutate(ethnicity_re=ifelse(ethnicity %in% "AI/AN", "nh_aian",
+                                    ifelse(ethnicity %in% "ASIAN", "nh_asian",
+                                           ifelse(ethnicity %in% "BLACK", "nh_black",
                                                   ifelse(ethnicity %in% "HISPANIC", "latinx",
                                                          ifelse(ethnicity %in% "NOT REPORTED", "unreported",
-                                                                ifelse(ethnicity %in% "WHITE", "white", 
-                                                                       "NULL")))))))%>%
+                                                                ifelse(ethnicity %in% "WHITE", "nh_white", 
+                                                                       "statewide")))))))%>%
+# pivot table wide
+  pivot_wider(
+    id_cols = county,
+    names_from = c(ethnicity_re, month_of_eligibility),
+    values_from = count,
+    names_glue = "{ethnicity_re}_{month_of_eligibility}",
+    values_fill = 0)%>%
 
-  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  group_by(county, aid_category)%>%
-  mutate(june25_june26_pct_change=(count_2026_06-count_2025_06)/count_2025_06*100
+  
+  group_by(county)%>%
+  mutate(
+    across(
+      ends_with("_2025_06"),
+      ~ {
+        col_2026 <- sub("2025_06$", "2026_06", cur_column())
+        
+        if_else(
+          .x == 0,
+          NA_real_,
+          (get(col_2026) - .x) / .x * 100
+        )
+      },
+      .names = "{sub('_2025_06$', '', .col)}_pct_change"
+    )
   )
 
 
+# Check the calculation worked: values match, looks good!
+
+check<-race_enrollment_june25%>%
+  filter(county=="San Diego")%>%
+  mutate(latinx_qa=(latinx_2026_06-latinx_2025_06)/latinx_2025_06*100)%>%
+  select(latinx_qa, latinx_pct_change)
+
+rm(check)
 
 # Analysis tables (not for dashboard)?-------------------------------------
 
