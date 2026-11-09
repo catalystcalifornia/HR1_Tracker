@@ -284,7 +284,13 @@ expansion_total_june25<-expansion_youth_june25%>%
   mutate(expansion_total_2025_06=expansion_youth_2025_06+expansion_adult_2025_06,
          expansion_total_2026_06=expansion_youth_2026_06+expansion_adult_2026_06,
          expansion_total_pct_change=(expansion_total_2025_06+expansion_total_2026_06)/expansion_total_2025_06*100)%>%
-relocate(geometry, .after = last_col())
+relocate(geometry, .after = last_col())%>%
+  st_as_sf(sf_column_name = "geometry")
+
+# check class-- good
+class(expansion_total_june25)
+
+mapview(expansion_total_june25)
   
 ###### Combine medi-cal total enrollment and by race tables into one wide table ######
 
