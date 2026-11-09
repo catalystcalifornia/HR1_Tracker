@@ -291,6 +291,8 @@ relocate(geometry, .after = last_col())%>%
 class(expansion_total_june25)
 
 mapview(expansion_total_june25)
+
+###### Push medi-cal expansion enrollment table to postgres ######
   
 ###### Combine medi-cal total enrollment and by race tables into one wide table ######
 
