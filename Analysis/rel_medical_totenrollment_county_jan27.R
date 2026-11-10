@@ -293,6 +293,70 @@ class(expansion_total_june25)
 mapview(expansion_total_june25)
 
 ###### Push medi-cal expansion enrollment table to postgres ######
+
+df<-expansion_total_june25 # assign as 'df'
+
+# make sure this is still a spatial df -- good
+class(df)
+
+# make sure no trailing spaces anywhere
+
+names(df) <- gsub(" ", "", names(df))
+
+df <- df %>%
+  mutate(across(where(is.character), ~ replace(.x, .x == " ", "")))
+
+# set column types
+
+charvect <- rep("numeric", ncol(df) - 1)
+charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
+names(charvect) <- names(df)[names(df) != "geometry"]
+
+sf::st_geometry(df) <- "geometry"
+
+# set table info
+
+table_name <- "rel_medical_enrollment_expansion_county_jan27"
+schema <- "dashboard"
+indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
+Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
+for age 0-10 and age 19+ Original data source: https://data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
+source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
+qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical.docx"
+table_comment <- paste0(indicator, source)
+
+# push to postgres
+
+# dbWriteTable(con,  table_name, df,
+#              overwrite = TRUE, row.names = FALSE,
+#              field.types = charvect)
+
+# Push sf dataframe to PostGIS
+st_write(
+  df,
+  dsn = con,
+  layer = Id(schema = schema, table =table_name),
+  delete_layer = TRUE
+)
+
+# add meta data
+
+column_names <- colnames(df) # Get column names
+
+column_comments <- c(
+  'indicator ID number',
+  'tract',
+  'Total renter occupied housing units (denominator)',
+  'Total renter occupied housing units MOE',
+  'Total renter occupied housing units that are rent burdened. This is defined as spending 50% or more of total income on rent',
+  'Total renter occupied housing units that are rent burdened MOE',
+  'Total renter occupied housing units that are rent burdened CV',
+  'Percentage of renter occupied units that are rent burdened out of total renter occupied units by tract',
+  'MOE of the percentage of renter occupied units that are rent burdened',
+  'CV of the percentage of renter occupied units that are rent burdened',
+  'Percent rank of the estimate rentburden_rate')
+
+add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
   
 ###### Combine medi-cal total enrollment and by race tables into one wide table ######
 
