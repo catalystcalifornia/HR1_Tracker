@@ -8,6 +8,7 @@ options(tigris_use_cache = TRUE)
 # Connect to postgres
 source("W:\\RDA Team\\R\\credentials_source.R")
 con <- connect_to_db("eqb_hr1_tracker")
+con_shared <-connect_to_db("rda_shared_data")
 
 ########### Read in raw CalFresh data ----
 # Data from https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard
@@ -46,16 +47,19 @@ table(qa$caseload_age_total == qa$caseload_race_ethnicity_total, useNA='always')
 # QA: Is the number of households always greater than the number of caseloads? Yes.
 table(qa$cal_fresh_households > qa$caseload_race_ethnicity_total, useNA='always')
 
-# Pulling in 2024 county geometries
-ca_counties <- counties(state = "CA", cb = TRUE, progress_bar = FALSE) %>%
-  select(county_geoid = GEOID, county_name = NAME, geom = geometry) %>%
-  st_transform(4326)
-st_crs(ca_counties)
+# Pulling CA county geoids, names
+ca_counties <- dbGetQuery(con_shared, "SELECT statefp, countyfp, name AS county_name FROM geographies_ca.cb_2023_06_county_500k")
+counties <- ca_counties %>%
+  mutate(county_geoid = paste0(statefp, countyfp)) %>%
+  select(county_geoid, county_name)
 
 # Joining CalFresh data with county data
-enrollment_county <- ca_counties %>%
+enrollment_county <- counties %>%
   left_join(enrollment, by = c("county_name" = "county")) %>%
   mutate(geolevel = "county", .after = county_name) 
+summary(enrollment_county$calfresh_persons_pct_change)
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# -11.508  -6.825  -4.913  -4.979  -3.146   1.996 
 
 final_df <- enrollment_county
 ########### Push to Postgres ----
@@ -64,12 +68,12 @@ table_name <- "rel_calfresh_totalenrollment_county_jan27"
 schema <- "dashboard"
 indicator <- "A table with the June 2025 and June 2026 CalFresh enrollment rates by county, using the
 total number of CalFresh persons (not households). Includes the percent change
-in enrollment from June 2025 to 2026. Data from California Dept. of
+in enrollment from June 2025 to June 2026. Data from California Dept. of
 Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard"
 source <- "Script: W:/Project/ECI/HR 1 Tracker/Github/AV/HR1_Tracker/Analysis/rel_calfresh_enrollment.R "
 qa_filepath <- "W:/Project/ECI/HR 1 Tracker/Documentation/QA_rel_calfresh_enrollment.docx"
 
-export_shpfile(con=con, df=final_df, schema=schema, table_name=table_name, geometry_column = "geom")
+dbWriteTable(con, Id(schema, table_name), final_df, overwrite = TRUE, row.names = FALSE)
 
 # Comment on table and columns
 column_names <- colnames(final_df) # Get column names
@@ -79,8 +83,7 @@ column_comments <- c(
   "County level table",
   "Number of persons enrolled in CalFresh during June 2025",
   "Number of persons enrolled in CalFresh during June 2026",
-  "Percent change of persons enrolled in CalFresh from June 2025 to June 2026",
-  "County geometry in CRS 4326"
+  "Percent change of persons enrolled in CalFresh from June 2025 to June 2026"
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
