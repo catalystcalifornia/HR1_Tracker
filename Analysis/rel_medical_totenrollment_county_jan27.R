@@ -327,17 +327,11 @@ table_comment <- paste0(indicator, source)
 
 # push to postgres
 
-# dbWriteTable(con,  table_name, df,
-#              overwrite = TRUE, row.names = FALSE,
-#              field.types = charvect)
+dbWriteTable(con,  table_name, df,
+             overwrite = TRUE, row.names = FALSE,
+             field.types = charvect)
 
-# Push sf dataframe to PostGIS
-st_write(
-  df,
-  dsn = con,
-  layer = Id(schema = schema, table =table_name),
-  delete_layer = TRUE
-)
+
 
 # add meta data
 
