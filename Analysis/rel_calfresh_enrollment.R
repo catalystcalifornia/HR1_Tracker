@@ -48,7 +48,7 @@ table(qa$cal_fresh_households > qa$caseload_race_ethnicity_total, useNA='always'
 
 # Pulling in 2024 county geometries
 ca_counties <- counties(state = "CA", cb = TRUE, progress_bar = FALSE) %>%
-  select(county_geoid = GEOID, county_name = NAME, geometry) %>%
+  select(county_geoid = GEOID, county_name = NAME, geom = geometry) %>%
   st_transform(4326)
 st_crs(ca_counties)
 
@@ -69,7 +69,7 @@ Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-d
 source <- "Script: W:/Project/ECI/HR 1 Tracker/Github/AV/HR1_Tracker/Analysis/rel_calfresh_enrollment.R "
 qa_filepath <- "W:/Project/ECI/HR 1 Tracker/Documentation/QA_rel_calfresh_enrollment.docx"
 
-dbWriteTable(con, Id(schema, table_name), final_df, overwrite = TRUE, row.names = FALSE)
+export_shpfile(con=con, df=final_df, schema=schema, table_name=table_name, geometry_column = "geom")
 
 # Comment on table and columns
 column_names <- colnames(final_df) # Get column names
