@@ -143,7 +143,7 @@ schema <- "dashboard"
 indicator <- "Total monthly enrollment of Medi-Cal eligibles (total Medi-Cal universe) expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical.docx"
+qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
@@ -256,7 +256,63 @@ ungroup()
 # check class-- good
 class(expansion_total_june25)
 
-###### Push Medi-Cal expansion relational table to postgres ######
+###### Push Medi-cal expansion enrollment table to postgres ######
+
+df<-expansion_total_june25 # assign as 'df'
+
+# make sure no trailing spaces anywhere
+
+names(df) <- gsub(" ", "", names(df))
+
+df <- df %>%
+  mutate(across(where(is.character), ~ replace(.x, .x == " ", "")))
+
+# set column types
+
+charvect <- rep("numeric", ncol(df))
+charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
+names(charvect) <- names(df)
+
+# set table info
+
+table_name <- "rel_medical_enrollment_expansion_county_jan27"
+schema <- "dashboard"
+indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
+Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
+for age 0-10 and age 19+ Original data source: https:\\data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
+source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
+qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+table_comment <- paste0(indicator, source)
+
+# push to postgres
+
+dbWriteTable( con,
+              DBI::Id(schema = schema, table = table_name),
+              df,
+              overwrite = TRUE, row.names = FALSE,
+              field.types = charvect)
+
+# add meta data
+
+column_names <- colnames(df) # Get column names
+
+column_comments <- column_comments <- c(
+  'county geoid',
+  'county name',
+  'geolevel',
+  'Total medi-cal expansion enrollment by county for June 2025 for age 0-19',
+  'Total medi-cal expansion enrollment by county for June 2026 for age 0-19',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for age 0-19',
+  'Total medi-cal expansion enrollment by county for June 2025 for adults 19 plus',
+  'Total medi-cal expansion enrollment by county for June 2026 for adults 19 plus',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for adults 19 plus',
+  'Total medi-cal expansion enrollment by county for June 2025 for entire medi-cal expansion population',
+  'Total medi-cal expansion enrollment by county for June 2026 for entire medi-cal expansion population',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for entire medi-cal expansion population'
+)
+
+add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+
 
 # Analysis: Medi-Cal enrollment by race ----------------------
 
@@ -334,63 +390,7 @@ race_enrollment_june25<-race_enrollment_june25%>%
 class(race_enrollment_june25)
 
 
-###### Push Medi-cal expansion enrollment table to postgres ######
 
-df<-expansion_total_june25 # assign as 'df'
-
-# make sure no trailing spaces anywhere
-
-names(df) <- gsub(" ", "", names(df))
-
-df <- df %>%
-  mutate(across(where(is.character), ~ replace(.x, .x == " ", "")))
-
-# set column types
-
-charvect <- rep("numeric", ncol(df))
-charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
-names(charvect) <- names(df)
-
-# set table info
-
-table_name <- "rel_medical_enrollment_expansion_county_jan27"
-schema <- "dashboard"
-indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
-Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
-for age 0-10 and age 19+ Original data source: https:\\data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
-source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical.docx"
-table_comment <- paste0(indicator, source)
-
-# push to postgres
-
-dbWriteTable( con,
-              DBI::Id(schema = schema, table = table_name),
-              df,
-             overwrite = TRUE, row.names = FALSE,
-             field.types = charvect)
-
-# add meta data
-
-column_names <- colnames(df) # Get column names
-
-column_comments <- column_comments <- c(
-  'county geoid',
-  'county name',
-  'geolevel',
-  'Total medi-cal expansion enrollment by county for June 2025 for age 0-19',
-  'Total medi-cal expansion enrollment by county for June 2026 for age 0-19',
-  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for age 0-19',
-  'Total medi-cal expansion enrollment by county for June 2025 for adults 19 plus',
-  'Total medi-cal expansion enrollment by county for June 2026 for adults 19 plus',
-  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for adults 19 plus',
-  'Total medi-cal expansion enrollment by county for June 2025 for entire medi-cal expansion population',
-  'Total medi-cal expansion enrollment by county for June 2026 for entire medi-cal expansion population',
-  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for entire medi-cal expansion population'
-  )
-
-add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
-  
 
 # Analysis: Language Spoken Medi-Cal enrollment ----------------------
 
