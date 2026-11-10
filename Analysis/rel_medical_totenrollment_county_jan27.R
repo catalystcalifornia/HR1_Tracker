@@ -72,7 +72,7 @@ table(medical_lang_raw$month_of_eligibility) # missing here too
 table(medical_aid_raw$month_of_eligibility) # missing here too
 
 
-###### Total Medi-Cal enrollment ######
+# Analysis: Total Medi-Cal enrollment -----------------------
 
 # Lets start with June 2025 as the base and compare to---> June 2026 
 
@@ -85,44 +85,182 @@ total_enrollment_june25<-medical_race_raw%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   rename_with(~ paste0("medical_enrollment_", .x), .cols = 2:3) %>%group_by(county)%>%
   mutate(medical_enrollment_pct_change=(medical_enrollment_2026_06-medical_enrollment_2025_06)/medical_enrollment_2025_06*100)%>%
+  left_join(ca_counties%>%select(GEOID, NAME), by=c("county"="NAME"))%>%
+  mutate(geolevel="county")%>%
+  rename("county_name"="county",
+         "county_geoid"="GEOID")%>%
+  select(county_geoid, county_name, geolevel, everything()) %>%
+select(-geometry)%>% # Remove geom column
+ungroup()
+
+
+# check resulting table is a df -- good
+class(total_enrollment_june25)
+
+# export this as a xlsx file: for EQB project team sharing no need to QA this 
+# write.xlsx(total_enrollment_june25,
+# file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_june25_june26.xlsx", overwrite = TRUE)
+
+
+# quick visual: June 2025 --> June 2026: for sharing with EQB no need to QA this visual
+
+# ggplot(total_enrollment_june25,
+#        aes(x = county, y = june25_june26_pct_change)) +
+#   geom_col(fill = "steelblue") +
+#   geom_hline(yintercept = 0, color = "black") +
+#   labs(
+#     title = "Percent Change in Medi-Cal Enrollment by County",
+#     subtitle = "June 2025 to June 2026",
+#     x = "County",
+#     y = "Percent Change (%)"
+#   ) +
+#   theme_minimal() +
+#   theme(
+#     axis.text.x = element_text(angle = 90, hjust = 1)
+#   )
+
+###### Push this to postgres as a relational table ######
+
+df<-total_enrollment_june25 # assign as 'df'
+
+# make sure no trailing spaces anywhere
+
+names(df) <- gsub(" ", "", names(df))
+
+df <- df %>%
+  mutate(across(where(is.character), ~ replace(.x, .x == " ", "")))
+
+# set column types
+
+charvect <- rep("numeric", ncol(df))
+charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
+names(charvect) <- names(df)
+
+# set table info
+
+table_name <- "rel_medical_enrollment_county_jan27"
+schema <- "dashboard"
+indicator <- "Total monthly enrollment of Medi-Cal eligibles (total Medi-Cal universe) expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
+ Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
+source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
+qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical.docx"
+table_comment <- paste0(indicator, source)
+
+# push to postgres
+
+dbWriteTable(con,     
+             DBI::Id(schema = schema, table = table_name),
+             df,
+             overwrite = TRUE, row.names = FALSE,
+             field.types = charvect)
+
+# add meta data
+
+column_names <- colnames(df) # Get column names
+
+column_comments <- c(
+  'county geoid',
+  'county name',
+  'geolevel',
+  'Total medi-cal enrollment by county for June 2025',
+  'Total medi-cal enrollment by county for June 2026',
+  'Percent change in medi-cal enrollment by county from June 2025 to June 2026')
+
+add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+
+# Analysis: Medi-Cal Expansion population: Immigrant enrollment in Medi-Cal -------------------
+
+# We are analyzing specifically the Medi-Cal expansion population to get at immigrants, documented+undocumented, with Medi-Cal
+
+# Start with analysis for age 0-19
+
+expansion_youth_june25<- medical_exp_0_19_raw %>%
+  filter(eligibility_date %in% c("2026-06", "2025-06")) %>%
+  group_by(eligibility_date, county) %>%
+  summarise(
+    total = sum(number_of_beneficiaries, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  rename("month_of_eligibility"="eligibility_date")%>% # make this match other medi-cal dataset 
+  pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
+  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
+  rename_with(~ paste0("expansion_youth_", .x), .cols = 2:3) %>%
+  group_by(county)%>%
+  mutate(expansion_youth_pct_change=(expansion_youth_2026_06-expansion_youth_2025_06)/expansion_youth_2025_06*100)%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
          "county_geoid"="GEOID")%>%
   select(county_geoid, county_name, geolevel, everything()) %>%
-  st_as_sf(sf_column_name = "geometry") # I want to preserve the spatial column
+  mutate(across(where(is.numeric),
+                ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
+ select(-geometry)%>% # Remove geom
+ungroup()
 
-# check resulting table is a spatial df -- good
-class(total_enrollment_june25)
+# now analyze separately for the 19+ expansion population
 
-# view as map
-mapview(total_enrollment_june25) # good
+expansion_adult_june25<- medical_exp_19_50plus_raw %>%
+  filter(reporting_period %in% c("2026-06", "2025-06")) %>%
+  group_by(reporting_period, county) %>%
+  summarise(
+    total = sum(number_of_eligible_individuals, na.rm = TRUE),
+    .groups = "drop"
+  ) 
 
-# export this as a xlsx file:
-write.xlsx(total_enrollment_june25,
-file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_june25_june26.xlsx", overwrite = TRUE)
+# quick check we aggregated all the age groups to get a combined total for age 19
+
+check<-medical_exp_19_50plus_raw%>%
+  filter(county=='Alameda')%>%
+  filter(reporting_period %in% c("2026-06")) %>%
+  summarise(total=sum(number_of_eligible_individuals)) #17471 for June 2026
+
+expansion_adult_june25%>%
+  filter(county=="Alameda")%>%
+  View() #17471 for June 2026 -- good
+
+# continue with calcs and pivoting table wider
+
+expansion_adult_june25<-expansion_adult_june25%>%
+  rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset 
+  pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
+  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
+  rename_with(~ paste0("expansion_adult_", .x), .cols = 2:3) %>%
+  group_by(county)%>%
+  mutate(expansion_enrollment_pct_change=(expansion_adult_2026_06-expansion_adult_2025_06)/expansion_adult_2025_06*100)%>%
+  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
+  mutate(geolevel="county")%>%
+  rename("county_name"="county",
+         "county_geoid"="GEOID")%>%
+  select(county_geoid, county_name, geolevel, everything()) %>%
+  mutate(across(where(is.numeric),
+                ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
+  select(-geometry)%>% # I want to preserve the spatial column
+ungroup()
 
 
-# quick visual: June 2025 --> June 2026
+# Join tables together to calculate for TOTAL expansion population not disaggregated by age groups
 
-ggplot(total_enrollment_june25,
-       aes(x = county, y = june25_june26_pct_change)) +
-  geom_col(fill = "steelblue") +
-  geom_hline(yintercept = 0, color = "black") +
-  labs(
-    title = "Percent Change in Medi-Cal Enrollment by County",
-    subtitle = "June 2025 to June 2026",
-    x = "County",
-    y = "Percent Change (%)"
-  ) +
-  theme_minimal() +
-  theme(
-    axis.text.x = element_text(angle = 90, hjust = 1)
-  )
+expansion_total_june25<-expansion_youth_june25%>%
+  left_join(expansion_adult_june25)%>%
+  select(-ends_with(".y")) %>% # clean up the duplicate columns from the join
+  rename_with(~ str_remove(.x, "\\.x$"), ends_with(".x"))%>% # clean up column names
+  
+  # calculate total enrollment and percent change
+  group_by(county_geoid)%>%
+  mutate(expansion_total_2025_06=expansion_youth_2025_06+expansion_adult_2025_06,
+         expansion_total_2026_06=expansion_youth_2026_06+expansion_adult_2026_06,
+         expansion_total_pct_change=(expansion_total_2026_06-expansion_total_2025_06)/expansion_total_2025_06*100)%>%
+  mutate(across(where(is.numeric), ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
+ungroup()
 
+# check class-- good
+class(expansion_total_june25)
 
-######  Medi-Cal enrollment by race  ######
+###### Push Medi-Cal expansion relational table to postgres ######
 
+# Analysis: Medi-Cal enrollment by race ----------------------
+
+# Create separate relational table for medi-cal monthly enrollment and percent change between June 2025 and June 2026 by race
 
 race_enrollment_june25<- medical_race_raw %>%
   filter(month_of_eligibility %in% c("2026-06", "2025-06")) %>%
@@ -134,7 +272,7 @@ race_enrollment_june25<- medical_race_raw %>%
   group_by(month_of_eligibility, county) %>%
   mutate(total = sum(count)) %>%
   ungroup()%>%
-  # NOTE I am still researching whether or not these ethnicity categories are not inclusive of Latinx. No definitive answer yet. 
+  # NOTE I am still researching whether or not these ethnicity categories are not inclusive of Latinx. No definitive answer yet. Reached out to DHCS and can come back and adjust labels when I get more information
   
   mutate(ethnicity_re=ifelse(ethnicity %in% "AI/AN", "nh_aian",
                                     ifelse(ethnicity %in% "ASIAN", "nh_asian",
@@ -181,7 +319,7 @@ check<-race_enrollment_june25%>%
 rm(check)
 
 
-# left join county geoms to get county_geoid values and clean up columns to match naming conventions
+# left join county_geoid values and clean up columns to match naming conventions
 
 race_enrollment_june25<-race_enrollment_june25%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
@@ -189,115 +327,16 @@ race_enrollment_june25<-race_enrollment_june25%>%
   rename("county_name"="county",
          "county_geoid"="GEOID")%>%
   select(county_geoid, county_name, geolevel, everything())%>%
-  st_as_sf(sf_column_name = "geometry") # I want to preserve the spatial column
+  select(-geometry)%>% # Remove county geoms
+  ungroup()
 
-# check resulting table is a spatial df -- good
+# check resulting table is a  df -- good
 class(race_enrollment_june25)
 
-# view as map
-mapview(race_enrollment_june25) # good
 
-
-##### Language Spoken Medi-Cal enrollment ######
-
-
-
-
-###### IMMIGRANT enrollment in Medi-Cal ######
-
-# We are analyzing specifically the Medi-Cal expansion population to get at immigrants, documented+undocumented, with Medi-Cal
-
-# focus just on analzying expansion for age 0-19
-
-expansion_youth_june25<- medical_exp_0_19_raw %>%
-  filter(eligibility_date %in% c("2026-06", "2025-06")) %>%
-  group_by(eligibility_date, county) %>%
-  summarise(
-    total = sum(number_of_beneficiaries, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  rename("month_of_eligibility"="eligibility_date")%>% # make this match other medi-cal dataset 
-  pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
-  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  rename_with(~ paste0("expansion_youth_", .x), .cols = 2:3) %>%
-    group_by(county)%>%
-  mutate(expansion_youth_pct_change=(expansion_youth_2026_06-expansion_youth_2025_06)/expansion_youth_2025_06*100)%>%
-  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
-  mutate(geolevel="county")%>%
-  rename("county_name"="county",
-         "county_geoid"="GEOID")%>%
-  select(county_geoid, county_name, geolevel, everything()) %>%
-  mutate(across(where(is.numeric),
-                ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
-  st_as_sf(sf_column_name = "geometry") # I want to preserve the spatial column
-
-
-# now analyze separately for the 19+ expansion population
-
-expansion_adult_june25<- medical_exp_19_50plus_raw %>%
-  filter(reporting_period %in% c("2026-06", "2025-06")) %>%
-  group_by(reporting_period, county) %>%
-  summarise(
-    total = sum(number_of_eligible_individuals, na.rm = TRUE),
-    .groups = "drop"
-  ) 
-
-# quick check we aggregated all the age groups to get a combined total for age 19
-
-check<-medical_exp_19_50plus_raw%>%
-  filter(county=='Alameda')%>%
-  filter(reporting_period %in% c("2026-06")) %>%
-  summarise(total=sum(number_of_eligible_individuals)) #17471 for June 2026
-
-expansion_adult_june25%>%
-  filter(county=="Alameda")%>%
-  View() #17471 for June 2026 -- good
-
-# continue with calcs and pivoting table wider
-
-expansion_adult_june25<-expansion_adult_june25%>%
-  rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset 
-  pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
-  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  rename_with(~ paste0("expansion_adult_", .x), .cols = 2:3) %>%
-  group_by(county)%>%
-  mutate(expansion_enrollment_pct_change=(expansion_adult_2026_06-expansion_adult_2025_06)/expansion_adult_2025_06*100)%>%
-  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
-  mutate(geolevel="county")%>%
-  rename("county_name"="county",
-         "county_geoid"="GEOID")%>%
-  select(county_geoid, county_name, geolevel, everything()) %>%
-  mutate(across(where(is.numeric),
-                ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
-  st_as_sf(sf_column_name = "geometry") # I want to preserve the spatial column
-
-# Join tables together to calculate for TOTAL expansion population not disagrgegated by age groups
-
-expansion_total_june25<-expansion_youth_june25%>%
-  left_join(expansion_adult_june25 %>% st_drop_geometry(),
-            by = "county_geoid")%>%
-  select(-ends_with(".y")) %>% # clean up the duplicate columns from the join
-  rename_with(~ str_remove(.x, "\\.x$"), ends_with(".x"))%>% # clean up column names
-
-  # calculate total enrollment and percent change
-  group_by(county_geoid)%>%
-  mutate(expansion_total_2025_06=expansion_youth_2025_06+expansion_adult_2025_06,
-         expansion_total_2026_06=expansion_youth_2026_06+expansion_adult_2026_06,
-         expansion_total_pct_change=(expansion_total_2025_06+expansion_total_2026_06)/expansion_total_2025_06*100)%>%
-relocate(geometry, .after = last_col())%>%
-  st_as_sf(sf_column_name = "geometry")
-
-# check class-- good
-class(expansion_total_june25)
-
-mapview(expansion_total_june25)
-
-###### Push medi-cal expansion enrollment table to postgres ######
+###### Push Medi-cal expansion enrollment table to postgres ######
 
 df<-expansion_total_june25 # assign as 'df'
-
-# make sure this is still a spatial df -- good
-class(df)
 
 # make sure no trailing spaces anywhere
 
@@ -308,11 +347,9 @@ df <- df %>%
 
 # set column types
 
-charvect <- rep("numeric", ncol(df) - 1)
+charvect <- rep("numeric", ncol(df))
 charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
-names(charvect) <- names(df)[names(df) != "geometry"]
-
-sf::st_geometry(df) <- "geometry"
+names(charvect) <- names(df)
 
 # set table info
 
@@ -320,53 +357,42 @@ table_name <- "rel_medical_enrollment_expansion_county_jan27"
 schema <- "dashboard"
 indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
 Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
-for age 0-10 and age 19+ Original data source: https://data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
+for age 0-10 and age 19+ Original data source: https:\\data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
 qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
 
-dbWriteTable(con,  table_name, df,
+dbWriteTable( con,
+              DBI::Id(schema = schema, table = table_name),
+              df,
              overwrite = TRUE, row.names = FALSE,
              field.types = charvect)
-
-
 
 # add meta data
 
 column_names <- colnames(df) # Get column names
 
-column_comments <- c(
-  'indicator ID number',
-  'tract',
-  'Total renter occupied housing units (denominator)',
-  'Total renter occupied housing units MOE',
-  'Total renter occupied housing units that are rent burdened. This is defined as spending 50% or more of total income on rent',
-  'Total renter occupied housing units that are rent burdened MOE',
-  'Total renter occupied housing units that are rent burdened CV',
-  'Percentage of renter occupied units that are rent burdened out of total renter occupied units by tract',
-  'MOE of the percentage of renter occupied units that are rent burdened',
-  'CV of the percentage of renter occupied units that are rent burdened',
-  'Percent rank of the estimate rentburden_rate')
+column_comments <- column_comments <- c(
+  'county geoid',
+  'county name',
+  'geolevel',
+  'Total medi-cal expansion enrollment by county for June 2025 for age 0-19',
+  'Total medi-cal expansion enrollment by county for June 2026 for age 0-19',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for age 0-19',
+  'Total medi-cal expansion enrollment by county for June 2025 for adults 19 plus',
+  'Total medi-cal expansion enrollment by county for June 2026 for adults 19 plus',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for adults 19 plus',
+  'Total medi-cal expansion enrollment by county for June 2025 for entire medi-cal expansion population',
+  'Total medi-cal expansion enrollment by county for June 2026 for entire medi-cal expansion population',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for entire medi-cal expansion population'
+  )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
   
-###### Combine medi-cal total enrollment and by race tables into one wide table ######
 
-medical_enrollment<-total_enrollment_june25%>%
-  left_join(
-    race_enrollment_june25 %>% st_drop_geometry(),
-    by = "county_geoid" ) %>%
-  relocate(geometry, .after = last_col())%>%
-select(-ends_with(".y")) %>% # clean up the duplicate columns from the join
-  rename_with(~ str_remove(.x, "\\.x$"), ends_with(".x")) # clean up column names
-
-# check class-- good
-class(medical_enrollment)
-
-#map
-mapview(medical_enrollment)
+# Analysis: Language Spoken Medi-Cal enrollment ----------------------
 
 
 # Analysis tables (not for dashboard)?-------------------------------------
