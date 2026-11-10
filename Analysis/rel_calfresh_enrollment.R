@@ -48,7 +48,9 @@ table(qa$cal_fresh_households > qa$caseload_race_ethnicity_total, useNA='always'
 
 # Pulling in 2024 county geometries
 ca_counties <- counties(state = "CA", cb = TRUE, progress_bar = FALSE) %>%
-  select(county_geoid = GEOID, county_name = NAME, geometry)
+  select(county_geoid = GEOID, county_name = NAME, geometry) %>%
+  st_transform(4326)
+st_crs(ca_counties)
 
 # Joining CalFresh data with county data
 enrollment_county <- ca_counties %>%
@@ -78,7 +80,7 @@ column_comments <- c(
   "Number of persons enrolled in CalFresh during June 2025",
   "Number of persons enrolled in CalFresh during June 2026",
   "Percent change of persons enrolled in CalFresh from June 2025 to June 2026",
-  "County geometry"
+  "County geometry in CRS 4326"
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
