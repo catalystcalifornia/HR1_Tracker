@@ -24,7 +24,6 @@ con_shared<-connect_to_db("rda_shared_data")
 drv <- dbDriver("PostgreSQL")
 
 # Read in tables from postgres:
-### I think the demographic cuts of most interest are: total enrollment, by age/race, aid category, and language spoken
 
 medical_race_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_eligibles_race_age_county_2010_26")
 
