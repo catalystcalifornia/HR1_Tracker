@@ -91,7 +91,11 @@ total_enrollment_june25<-medical_race_raw%>%
          "county_geoid"="GEOID")%>%
   select(county_geoid, county_name, geolevel, everything()) %>%
 select(-geometry)%>% # Remove geom column
+ filter(county_name!="STATEWIDE")%>% # remove row for statewide 
 ungroup()
+
+# check total number of unique counties remaining in my table
+length(unique(total_enrollment_june25$county_name)) # 58 -- good
 
 
 # check resulting table is a df -- good
@@ -172,6 +176,34 @@ add_table_comments(con, schema, table_name, indicator, source, qa_filepath, colu
 
 # We are analyzing specifically the Medi-Cal expansion population to get at immigrants, documented+undocumented, with Medi-Cal
 
+# Check how many unique counties are in this dataset and if California state-wide is included
+
+length(unique(medical_exp_0_19_raw$county)) # 59 (should be 58 counties)
+length(unique(medical_exp_19_50plus_raw$county))  # 60 (should be 58 counties)
+
+# explore what the extra county is that is in the medi-cal expansion tables but not in the california counties table
+
+outlier<-medical_exp_0_19_raw %>%
+  distinct(county) %>%
+  anti_join(ca_counties %>% st_drop_geometry(),
+            by = c("county" = "NAME")) # San Diego is the extra county? But I see it in both?
+
+# the issue is there are values of 'San Diego ' with an extra space so lets clean those up
+medical_exp_0_19_raw<-medical_exp_0_19_raw %>%
+  mutate(county=ifelse(county %in% "San Diego ", "San Diego", county))
+
+# now check unique county names
+length(unique(medical_exp_0_19_raw$county)) # 58 -good
+
+# now check what the extra county names are in the 19+ table
+
+medical_exp_19_50plus_raw %>%
+  distinct(county) %>%
+  anti_join(ca_counties %>% st_drop_geometry(),
+            by = c("county" = "NAME")) # This has 'Statewide' and 'Statewide total' which explains why there are 60 unique county names instead of 58
+
+
+
 # Start with analysis for age 0-19
 
 expansion_youth_june25<- medical_exp_0_19_raw %>%
@@ -180,7 +212,41 @@ expansion_youth_june25<- medical_exp_0_19_raw %>%
   summarise(
     total = sum(number_of_beneficiaries, na.rm = TRUE),
     .groups = "drop"
+  ) 
+
+
+# check how many unique  counties there are: 
+length(unique(expansion_youth_june25$county)) # 57 out of 58 one is dropped
+
+
+# Check what is being dropped -- Alpine 
+
+medical_exp_0_19_raw %>%
+  filter(county %in% setdiff(
+    unique(medical_exp_0_19_raw$county),
+    unique(expansion_youth_june25$county)
+  )) %>%
+  count(county, eligibility_date)
+
+# revise code so Alpine is not dropped even if it doesn't have data for both our year/month of interest
+
+expansion_youth_june25 <- medical_exp_0_19_raw %>%
+  filter(eligibility_date %in% c("2026-06", "2025-06")) %>%
+  group_by(eligibility_date, county) %>%
+  summarise(
+    total = sum(number_of_beneficiaries, na.rm = TRUE),
+    .groups = "drop"
   ) %>%
+  complete(
+    county = unique(medical_exp_0_19_raw$county),
+    eligibility_date = c("2025-06", "2026-06")
+  )
+# check that worked
+length(unique(expansion_youth_june25$county)) # 58 -- good
+
+# Proceed with calcs
+
+expansion_youth_june25<-expansion_youth_june25%>%
   rename("month_of_eligibility"="eligibility_date")%>% # make this match other medi-cal dataset 
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
@@ -197,15 +263,23 @@ expansion_youth_june25<- medical_exp_0_19_raw %>%
  select(-geometry)%>% # Remove geom
 ungroup()
 
+# one last check 
+length(unique(expansion_youth_june25$county)) # 58 -- good
+
 # now analyze separately for the 19+ expansion population
 
 expansion_adult_june25<- medical_exp_19_50plus_raw %>%
   filter(reporting_period %in% c("2026-06", "2025-06")) %>%
-  group_by(reporting_period, county) %>%
+  rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset
+  group_by(month_of_eligibility, county) %>%
   summarise(
     total = sum(number_of_eligible_individuals, na.rm = TRUE),
     .groups = "drop"
-  ) 
+  ) %>%
+  complete(
+    county = unique(medical_exp_0_19_raw$county),
+    month_of_eligibility = c("2025-06", "2026-06")
+  )
 
 # quick check we aggregated all the age groups to get a combined total for age 19
 
@@ -221,7 +295,6 @@ expansion_adult_june25%>%
 # continue with calcs and pivoting table wider
 
 expansion_adult_june25<-expansion_adult_june25%>%
-  rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset 
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   rename_with(~ paste0("expansion_adult_", .x), .cols = 2:3) %>%
@@ -234,9 +307,13 @@ expansion_adult_june25<-expansion_adult_june25%>%
   select(county_geoid, county_name, geolevel, everything()) %>%
   mutate(across(where(is.numeric),
                 ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
-  select(-geometry)%>% # I want to preserve the spatial column
-ungroup()
+  select(-geometry)%>% # I want to remove the spatial column
+  filter(!grepl("Statewide|Statewide Total", county_name))%>% # remove row for statewide 
+  ungroup()
 
+
+# check number of unique counties 
+length(unique(expansion_adult_june25$county_name)) # 58 good
 
 # Join tables together to calculate for TOTAL expansion population not disaggregated by age groups
 
@@ -255,6 +332,9 @@ ungroup()
 
 # check class-- good
 class(expansion_total_june25)
+
+# check final unique county count
+length(unique(expansion_total_june25$county_name)) # 58 good!
 
 ###### Push Medi-cal expansion enrollment table to postgres ######
 
