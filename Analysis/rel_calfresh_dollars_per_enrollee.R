@@ -65,7 +65,11 @@ dollars_per_enrollee_county <- counties %>%
   mutate(geolevel = "county", .after = county_name) 
 
 final_df <- dollars_per_enrollee_county %>%
-  select(county_geoid:geolevel, calfresh_dollars_per_enrollee_pct_change)
+  select(county_geoid:geolevel, 
+         calfresh_dollars_per_enrollee_2025_06, 
+         calfresh_dollars_per_enrollee_2025_06_real,
+         calfresh_dollars_per_enrollee_2026_06,
+         calfresh_dollars_per_enrollee_pct_change)
 
 ########### Push to Postgres ----
 # Write table with metadata
@@ -73,10 +77,12 @@ table_name <- "rel_calfresh_dollars_per_enrollee_county_jan27"
 schema <- "dashboard"
 indicator <- "A table with the June 2025 and June 2026 percent change in CalFresh 
 dollars per enrollee by county, using the total number of CalFresh persons (not households). 
-Note that the percent change is adjusted for inflation, specifically using 
-the Consumer Price Index's food at home index. For reference, the Consumer Price 
-Index's food at home prices rose 2.7% from June 2025 to June 2026. Data from 
-California Dept. of Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard"
+Essentially, dollars per enrollee is a measure of how much each CalFresh enrollee
+receives per month on average. Note that the percent change is adjusted for inflation, 
+specifically using the Consumer Price Index food at home index. For reference, the Consumer Price 
+Index food at home prices rose 2.7% from June 2025 to June 2026. Data from 
+California Dept. of Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard 
+and Consumer Price Index data from https://www.bls.gov/opub/ted/2026/consumer-prices-up-3-5-percent-over-the-year-ended-june-2026.htm"
 source <- "Script: W:/Project/ECI/HR 1 Tracker/Github/AV/HR1_Tracker/Analysis/rel_calfresh_dollars_per_enrollee.R "
 qa_filepath <- "W:/Project/ECI/HR 1 Tracker/Documentation/QA_rel_calfresh_dollars_per_enrollee.docx"
 
@@ -88,9 +94,10 @@ column_comments <- c(
   "Geoid of county", 
   "Name of county",
   "County level table",
-  "Number of persons enrolled in CalFresh during June 2025",
-  "Number of persons enrolled in CalFresh during June 2026",
-  "Percent change of dollars per enrollee in CalFresh from June 2025 to June 2026"
+  "Dollars per enrollee during June 2025",
+  "Dollars per enrollee during June 2025, using real dollars adjusted for inflation",
+  "Dollars per enrollee during June 2026",
+  "Percent change of dollars per enrollee in CalFresh from June 2025 to June 2026, adjusted for inflation"
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
