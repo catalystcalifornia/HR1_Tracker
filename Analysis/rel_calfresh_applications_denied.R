@@ -179,7 +179,7 @@ column_comments <- c(
   "County level table",
   "Number of CalFresh applications received during June 2025",
   "Number of CalFresh applications received during June 2026",
-  "Percent change in number of applications receivedfrom June 2025 to June 2026"
+  "Percent change in number of applications received from June 2025 to June 2026"
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
