@@ -40,8 +40,8 @@ applications_denied_rate_june <- calfresh_june_25_26 %>%
     id_cols = county,
     names_from = calendar_year,
     values_from = c(applications_denied, applications_received, denial_rate),
-    names_glue = "cal_fresh_{.value}_{calendar_year}_06") %>%
-  mutate(calfresh_denial_rate_pct_change = (cal_fresh_denial_rate_2026_06 / cal_fresh_denial_rate_2025_06 - 1) * 100)
+    names_glue = "calfresh_{.value}_{calendar_year}_06") %>%
+  mutate(calfresh_denial_rate_pct_change = (calfresh_denial_rate_2026_06 / calfresh_denial_rate_2025_06 - 1) * 100)
 summary(applications_denied_rate_june$calfresh_denial_rate_pct_change) 
 # Generally, the rate of applications denied has decreased.
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
@@ -95,8 +95,8 @@ applications_denied_reason_ineligible_rate_june <- calfresh_june_25_26 %>%
     id_cols = county,
     names_from = calendar_year,
     values_from = c(denial_reason_ineligible, applications_denied, ineligible_denial_rate),
-    names_glue = "cal_fresh_{.value}_{calendar_year}_06") %>%
-  mutate(calfresh_ineligible_denial_rate_pct_change = if_else(cal_fresh_ineligible_denial_rate_2025_06==0, cal_fresh_ineligible_denial_rate_2026_06, (cal_fresh_ineligible_denial_rate_2026_06 / cal_fresh_ineligible_denial_rate_2025_06 - 1) * 100))
+    names_glue = "calfresh_{.value}_{calendar_year}_06") %>%
+  mutate(calfresh_ineligible_denial_rate_pct_change = if_else(calfresh_ineligible_denial_rate_2025_06==0, calfresh_ineligible_denial_rate_2026_06, (calfresh_ineligible_denial_rate_2026_06 / calfresh_ineligible_denial_rate_2025_06 - 1) * 100))
 # Generally, the rate of applications denied due to ineligibility has decreased.
 summary(applications_denied_reason_ineligible_rate_june$calfresh_ineligible_denial_rate_pct_change)
 # Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NA's 
@@ -151,6 +151,8 @@ summary(applications_received_june$calfresh_applications_received_pct_change)
 # Generally, the number of applications received has decreased.
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
 # -32.184 -10.309  -6.739  -6.534  -2.385  19.703       2 
+# std dev = 8.347697
+sd(applications_received_june$calfresh_applications_received_pct_change, na.rm=TRUE)
 
 # Joining CalFresh data with county data
 rel_applications_received_june <- counties %>%
