@@ -101,6 +101,9 @@ VARIABLES:
 * Discontinued - Over Income (MAGI) / Over property (Non-MAGI)
 * Discontinued - Other Reasons 
 
+* Reinstated: Of the individuals Discontinued, the total number of individuals whose Medi-Cal was reinstated during the renewals processing timeframe.<br> 
+
+
 ARGUEMENT: ADMINISTRATIVE BURDEN on systems and enrollees
 
 * (Renewals Completed OR Renewals Completed by Due Date) / Renewals Due: Ratio of how many renewals were completed relative to how many were received <br>
@@ -109,7 +112,124 @@ ARGUEMENT: ADMINISTRATIVE BURDEN on systems and enrollees
 
 
 * (Discontinued - Failure to Respond + Other reasons) / (Total Discontinued)  
-** QUESTION: __Do we care most about ONLY 'failure to respond' discontinuation vs. 'failure to respond' AND 'other'?__ 
+** QUESTION: __Do we care most about ONLY 'failure to respond' discontinuation vs. 'failure to respond' AND 'other'?__ <br>
+** QUESTION: __Does a ratio of Reinstated / Discontinued (Failure to respond + Other, or ALL)  make sense?__
+
+# Explore 1: Renewals completed by due date / renewals due
+
+```{r}
+# filter for April 2025 and April 2026
+renewals_april<-renewals_raw%>%
+  filter(renewal_due_month=="2026-04" | renewal_due_month=="2025-04")%>% # filter only for April 25 and 26 
+select(renewal_due_month, county, renewals_due, renewals_completed_by_due_date,renewals_completed)
+
+# Analyze: RIGHT NOW COMBINING MAGI + NON MAGI
+
+ renewals_april_wide<-renewals_april%>%
+    mutate(across(3:5, as.numeric))%>%
+    group_by(county, renewal_due_month) %>%
+  summarise(
+    across(
+      c(renewals_due,
+        renewals_completed_by_due_date,
+        renewals_completed),
+      ~ sum(.x, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )%>%
+     pivot_wider(
+    names_from = renewal_due_month,
+    values_from = c(
+      renewals_due,
+      renewals_completed_by_due_date,
+      renewals_completed
+    ),
+    names_glue = "{.value}_{renewal_due_month}"
+  ) %>%
+  rename_with(~ gsub("-", "_", .x))
+ 
+```
+ 
+# RENEWALS COMPLETED BY DUE DATE / RENEWALS DUE for april 2025 and april 2026 and percent change between these ratios (MAGI + NON MAGI)
+
+```{r}
+ 
+ # Calculate: RENEWALS COMPLETED BY DUE DATE / RENEWALS DUE for april 25 and april 26 and percent change between these ratios
+ 
+renewals_april_wide%>%
+   mutate(
+    renewal_rate_2025_04 = renewals_completed_by_due_date_2025_04 / renewals_due_2025_04 * 100,
+
+    renewal_rate_2026_04 =renewals_completed_by_due_date_2026_04 / renewals_due_2026_04 * 100,
+
+    renewal_rate_pp_change = renewal_rate_2026_04 - renewal_rate_2025_04
+  )%>%
+  select(county, renewal_rate_2025_04,  renewal_rate_2026_04,  renewal_rate_pp_change)%>%
+  ggplot(aes(x = reorder(county, renewal_rate_pp_change),
+             y = renewal_rate_pp_change)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Change in Medi-Cal Renewal Completion Rates by County",
+    subtitle = "April 2025 to April 2026",
+    x = "County",
+    y = "Percentage-point change"
+  ) +
+  theme_minimal()
+ 
+
+
+```
+
+# RENEWALS COMPLETED / RENEWALS DUE for april 2025 and april 2026 and percent change between these ratios (MAGI + NON MAGI)
+
+# RENEWALS COMPLETED BY DUE DATE / RENEWALS DUE for april 2025 and april 2026 and percent change between these ratios (MAGI only)
+
+```{r}
+
+
+
+
+```
+
+```{r}
+ 
+ # Calculate: RENEWALS COMPLETED BY DUE DATE / RENEWALS DUE for april 25 and april 26 and percent change between these ratios
+ 
+renewals_april_wide%>%
+   mutate(
+    renewal_rate_2025_04 = renewals_completed_2025_04 / renewals_due_2025_04 * 100,
+
+    renewal_rate_2026_04 =renewals_completed_2026_04 / renewals_due_2026_04 * 100,
+
+    renewal_rate_pp_change = renewal_rate_2026_04 - renewal_rate_2025_04
+  )%>%
+  select(county, renewal_rate_2025_04,  renewal_rate_2026_04,  renewal_rate_pp_change)%>%
+  ggplot(aes(x = reorder(county, renewal_rate_pp_change),
+             y = renewal_rate_pp_change)) +
+  geom_col(fill = "steelblue") +
+  coord_flip() +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(
+    title = "Change in Medi-Cal Renewal Completion Rates by County",
+    subtitle = "April 2025 to April 2026",
+    x = "County",
+    y = "Percentage-point change"
+  ) +
+  theme_minimal()
+ 
+```
+
+
+
+
+
+
+
+
+
+
 
 
 ```{r, include=FALSE}
