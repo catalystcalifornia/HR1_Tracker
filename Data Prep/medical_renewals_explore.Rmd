@@ -55,13 +55,12 @@ ca_counties <- counties(
 
 # Exploring data source
 
-## Time frame
+* Data for renewal due month is every month from 2018 to April 2026
+* QUESTION: Most recent data is for:  __April 2026 - July 2026__ -- __*Would this provide any information with HR 1 impacts?*__
+* QUESTION: __MAGI + NON-MAGI or only MAGI?__
 
-* Data for *renewal due month* is every month from 2018 to *April* 2026
-* Maybe we need to be using *renewal time frame(*) which goes up to: June 2024 - September 2026
-* Unclear when data gets updated
 
-```{r}
+```{r, include=FALSE}
 
 # Explore data ------------------------------------------
 
@@ -90,20 +89,32 @@ renewals_raw%>%
 
 ```
 
-```{r}
+# What variables do we care most about for our arguements? 
+
+VARIABLES:
+
+* Renewals Due = universe of renewals in the reporting month
+* Renewals Completed = Renewals completed within renewal processing timeline -4 months (i.e. Jan renewal got processed by April)
+* Renewals Completed by Due Date = Renewals completed within the month or earlier it was due (i.e.: Renewal for month of Jan was completed in Jan)
+
+* Discontinued - Failure to Respond
+* Discontinued - Over Income (MAGI) / Over property (Non-MAGI)
+* Discontinued - Other Reasons 
+
+ARGUEMENT: ADMINISTRATIVE BURDEN on systems and enrollees
+
+* (Renewals Completed OR Renewals Completed by Due Date) / Renewals Due: Ratio of how many renewals were completed relative to how many were received <br>
+** QUESTION: __Do we care most about completed by due date vs. completed within 4 month timeframe?__ <br>
+** QUESTION: __Does this get at Renewals in Process?__
+
+
+* (Discontinued - Failure to Respond + Other reasons) / (Total Discontinued)  
+** QUESTION: __Do we care most about ONLY 'failure to respond' discontinuation vs. 'failure to respond' AND 'other'?__ 
+
+
+```{r, include=FALSE}
 
 # Methodology exploration--------------------------------------
-
-# QUESTION: MAGI + NON MAGI OR JUST MAGI ?
-
-# Explore different methodologies we want to do with renewals
-
-####### Variables of interest based on arguments we care about: ######
-
-#ADMINISTRATIVE BURDEN: 
-
-###Renewals Due / Renewals Completed / Renewals Completed by Due Date ---- wondering if it  makes more sense to combine these as a ratio
-###Discontinued - Failure to Respond
 
 
 #NEW ELIGIBILITY REQUIREMENTS:
@@ -128,7 +139,7 @@ renewals_cont_medical<-renewals_april%>%
   summarise(
     continued_medi_cal_eligibility =   sum(continued_medi_cal_eligibility, na.rm = TRUE),
     .groups = "drop") %>%
-  mutate(eligibility_financial_method = "COMBINED"))%>% # calculate combined for MAGI + NonMAGI
+  mutate(eligibility_financial_method = "COMBINED")%>% # calculate combined for MAGI + NonMAGI
   ungroup()
 
 
