@@ -56,7 +56,8 @@ counties <- ca_counties %>%
 # Joining CalFresh data with county data
 enrollment_county <- counties %>%
   left_join(enrollment, by = c("county_name" = "county")) %>%
-  mutate(geolevel = "county", .after = county_name) 
+  mutate(geolevel = "county", .after = county_name) %>%
+  arrange(desc(calfresh_persons_pct_change))
 summary(enrollment_county$calfresh_persons_pct_change)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 # -11.508  -6.825  -4.913  -4.979  -3.146   1.996 
