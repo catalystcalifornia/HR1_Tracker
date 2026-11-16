@@ -62,7 +62,8 @@ counties <- ca_counties %>%
 # Joining CalFresh data with county data
 dollars_per_enrollee_county <- counties %>%
   left_join(dollars_per_enrollee, by = c("county_name" = "county")) %>%
-  mutate(geolevel = "county", .after = county_name) 
+  mutate(geolevel = "county", .after = county_name) %>%
+  arrange(desc(calfresh_dollars_per_enrollee_pct_change))
 
 final_df <- dollars_per_enrollee_county %>%
   select(county_geoid:geolevel, 
