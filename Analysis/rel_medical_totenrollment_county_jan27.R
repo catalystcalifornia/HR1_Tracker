@@ -637,6 +637,174 @@ column_comments <- column_comments <- c(
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
+# Analysis: Medi-Cal Enrollment by Language Spoken------------------------------------
+
+# Check what dates are available
+medical_lang_raw%>%
+  group_by(month_of_eligibility)%>%
+  summarise(count=n())%>%
+  View() # October 2026
+
+# Check how many unique counties are in the data
+length(unique(medical_lang_raw$county)) # 60 instead of 58
+
+medical_lang_raw%>%
+  group_by(county)%>%
+  summarise(count=n())%>%
+  View() ## the two are: Invalid County Code, STATEWIDE
+
+# See what the 'Invalid County Code' looks like in the raw data
+medical_lang_raw%>%
+  filter(county=="Invalid County Code")%>%View() # No data and not for most years anyway so OK to filter out
+
+# remove the 2 non county rows
+medical_lang_re<-medical_lang_raw%>%
+  filter(!grepl("Invalid County Code|STATEWIDE", county))
+
+# check:
+length(unique(medical_lang_re$county)) # good now 58 counties
+
+# Clean up langauge column for when we eventually pivot table wider
+
+medical_lang_re<- medical_lang_re %>%
+  filter(month_of_eligibility %in% c("2026-10", "2025-06")) %>%
+  mutate(language_re=language %>%
+           str_to_lower() %>%
+           str_replace_all("[/ ]", "_") %>%
+           str_remove_all("-"))
+
+# Pivot table wider
+
+lang_enrollment_oct26<-medical_lang_re %>%
+  filter(month_of_eligibility %in% c("2026-10", "2025-06")) %>%
+  pivot_wider(
+    id_cols = county,
+    names_from = c(language_re, month_of_eligibility),
+    values_from = total_eligibles,
+    names_glue = "{language_re}_{month_of_eligibility}",
+    values_fill = 0)%>%
+  rename_with(~ gsub("-", "_", .x))   # clean up column names
+
+# skim through column names, I need to make sure the language options in June 2025 and October 2026 match
+
+cols_2025 <- names(lang_enrollment_oct26) %>%
+  stringr::str_subset("_2025_06$") # pull out 2025 column names
+
+expected_2026 <- sub("2025_06$", "2026_10", cols_2025) # use 2025 column names but replace with 2026 suffix
+
+# find out what is missing between 2025 and 2026 
+setdiff(expected_2026, names(lang_enrollment_oct26)) # unknown_2026_10 is missing in actual 2026 data 2025. In 2026 it is:missing_unknown_2025_06
+
+lang_enrollment_oct26%>%
+  select(missing_unknown_2026_10) # has
+
+lang_enrollment_oct26%>%
+  select(unknown_2026_10) # does not have 
+
+lang_enrollment_oct26%>%
+  select(missing_unknown_2025_06) # has 
+
+lang_enrollment_oct26%>%
+  select(unknown_2025_06) # has both unknown AND missing/unknown for 2025
+
+# We should just one 'missing' language that is a combination of missing/unknown+unknown
+
+lang_enrollment_oct26<-lang_enrollment_oct26%>%
+  group_by(county)%>%
+  mutate(unknown_2025_06=unknown_2025_06+missing_unknown_2025_06)%>% # make the 2025 unknown = unknown + unknown/missing
+  select(-missing_unknown_2025_06)%>% # now remove the unknown/missing for 2025
+  rename("unknown_2026_10"="missing_unknown_2026_10") # rename 2026 to just unknown
+
+# now see if there is still differences
+
+cols_2025 <- names(lang_enrollment_oct26) %>%
+  stringr::str_subset("_2025_06$") # pull out 2025 column names
+
+expected_2026 <- sub("2025_06$", "2026_10", cols_2025) # use 2025 column names but replace with 2026 suffix
+
+# find out what is missing between 2025 and 2026 
+setdiff(expected_2026, names(lang_enrollment_oct26)) # NONE! good!
+
+# Now check the reverse: languages in 2026 that are not in 2025
+
+cols_2026 <- names(lang_enrollment_oct26) %>%
+  stringr::str_subset("_2026_10$")
+
+expected_2025 <- sub("2026_10$", "2025_06", cols_2026)
+
+setdiff(expected_2025, names(lang_enrollment_oct26)) # "hindi_2025_06"   "punjabi_2025_06" these are NOT in 2025
+
+lang_enrollment_oct26%>%
+  select(punjabi_2025_06) # none for 2025
+
+lang_enrollment_oct26%>%
+  select(punjabi_2026_10) # has in 2026
+
+lang_enrollment_oct26%>%
+  select(hindi_2025_06) # none
+
+lang_enrollment_oct26%>%
+  select(hindi_2026_10) # has in 2026
+
+# Unfortunately will not be able to calculate percent change for Hindi / Punjabi from 2025 to 2026, will have to exclude entirely for now
+
+lang_enrollment_oct26<-lang_enrollment_oct26%>%
+  select(-c("punjabi_2026_10", "hindi_2026_10"))
+
+# now see if there are differences
+
+cols_2026 <- names(lang_enrollment_oct26) %>%
+  stringr::str_subset("_2026_10$")
+
+expected_2025 <- sub("2026_10$", "2025_06", cols_2026)
+
+setdiff(expected_2025, names(lang_enrollment_oct26)) # no more ! 
+
+# proceed with calcs:
+
+lang_enrollment_oct26<-lang_enrollment_oct26%>%
+  group_by(county)%>%
+  mutate(
+    across(
+      ends_with("_2025_06"),
+      ~ {
+        col_2026 <- sub("2025_06$", "2026_10", cur_column())
+        
+        if_else(
+          .x == 0,
+          NA_real_,
+          (get(col_2026) - .x) / .x * 100
+        )
+      },
+      .names = "{sub('_2025_06$', '', .col)}_pct_change"
+    )
+  )
+
+# Check the calculation worked: values match, looks good!
+
+lang_enrollment_oct26%>%
+  filter(county=="Los Angeles")%>%
+  mutate(korean_qa=(korean_2026_10-korean_2025_06)/korean_2025_06*100)%>%
+  select(korean_qa, korean_pct_change)%>%
+  View()
+
+
+# Now add in county geoids and clean up column names to match workflow
+
+lang_enrollment_oct26<-lang_enrollment_oct26%>%
+  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
+  mutate(geolevel="county")%>%
+  rename("county_name"="county",
+         "county_geoid"="GEOID")%>%
+  select(county_geoid, county_name, geolevel, everything()) %>%
+  mutate(across(where(is.numeric),
+                ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
+  select(-geometry)%>%
+  ungroup()
+
+# check class of final df -- good
+class(lang_enrollment_oct26)
+
 
 # RACE ANALYSIS: HANDING OFF TO ALICIA: NOT READY FOR QA YET 11/20/26----------------------
 
@@ -719,22 +887,3 @@ class(race_enrollment_june25)
 # MISC DATA EXPLORATION: Not pushing to postgres : DOES NOT NEED QA RIGHT NOW 11/10/26 -----------------------------------
 
 ###### Language Spoken Medi-Cal enrollment ######
-
-medical_lang_june25<- medical_lang_raw %>%
-  filter(month_of_eligibility %in% c("2026-06", "2025-06")) %>%
-  group_by(month_of_eligibility, county, language) %>%
-  summarise(
-    count = sum(total_eligibles, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  group_by(month_of_eligibility, county) %>%
-  mutate(total = sum(count)) %>%
-  ungroup()%>%
-  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
-  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  group_by(county, language)%>%
-  mutate(june25_june26_pct_change=(count_2026_10-count_2025_06)/count_2025_06*100)
-
-# export this as a xlsx file:
-write.xlsx(medical_lang_june25,
-           file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_spokenlang_june25_june26.xlsx", overwrite = TRUE)
