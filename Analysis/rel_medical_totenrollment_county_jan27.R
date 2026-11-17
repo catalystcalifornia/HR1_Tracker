@@ -61,30 +61,32 @@ total_lang_lac<-medical_lang_raw%>%
 
 # Time bench marks from EQB: 
 # Before HR 1 benchmark: June 2025, July 2025, October 2025
-# ‘After’ HR 1 benchmark: June 2026, July 2026, October 2026
+# ‘After’ HR 1 benchmark: Most recent data:  October 2026
 
 # Lets see if those ranges of months/dates exist in the data
-
 
 table(medical_race_raw$month_of_eligibility) # yes I see data for 2025 and 2026 June/July. But for some reason ONLY October 2025 is missing...
 
 table(medical_lang_raw$month_of_eligibility) # missing here too
 table(medical_aid_raw$month_of_eligibility) # missing here too
 
+# Methodology decision (also written in QA doc): Because Medi-Cal enrollment in general does not to be very seasonal, based on enrollment mapped quarterly from 2012-2026 here: https://www.chcf.org/medi-cal-enrollment-tracker/?__cf_chl_tk=m6KSwdY9YPwajvB51aKhJNNg93R3CSKvRXpLu7SgEMA-1794865612-1.0.1.1-qzn.Um1gXbwHmwfqqAykoa0nSQQ4pC6tO33moTcbVQk
+# I feel OK with moving up the 'later' comparison date so that the 'before' and 'after' months are not the same. 
+# This way we are measuring more 'after' HR 1
 
 # Analysis: Total Medi-Cal enrollment -----------------------
 
-# Lets start with June 2025 as the base and compare to---> June 2026 
+# Lets start with June 2025 as the base and compare to---> OCTOBER 2026 
 
 total_enrollment_june25<-medical_race_raw%>%
-  filter(month_of_eligibility=="2026-06" | month_of_eligibility=="2025-06")%>%
+  filter(month_of_eligibility=="2026-10" | month_of_eligibility=="2025-06")%>%
   group_by(month_of_eligibility, county)%>%
   summarise(total=sum(total_eligibles))%>%
   ungroup()%>%
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   rename_with(~ paste0("medical_enrollment_", .x), .cols = 2:3) %>%group_by(county)%>%
-  mutate(medical_enrollment_pct_change=(medical_enrollment_2026_06-medical_enrollment_2025_06)/medical_enrollment_2025_06*100)%>%
+  mutate(medical_enrollment_pct_change=(medical_enrollment_2026_10-medical_enrollment_2025_06)/medical_enrollment_2025_06*100)%>%
   left_join(ca_counties%>%select(GEOID, NAME), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
@@ -97,24 +99,24 @@ ungroup()
 # check total number of unique counties remaining in my table
 length(unique(total_enrollment_june25$county_name)) # 58 -- good
 
-
 # check resulting table is a df -- good
 class(total_enrollment_june25)
 
+# 16 NAs because they don't have June 2025 OR October 2026 enrollment figures -seem like smaller areas so this is OK
+sum(is.na(total_enrollment_june25$medical_enrollment_pct_change))
+
 # export this as a xlsx file: for EQB project team sharing no need to QA this 
-# write.xlsx(total_enrollment_june25,
-# file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_june25_june26.xlsx", overwrite = TRUE)
+ # write.xlsx(total_enrollment_june25, file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_june25_oct26.xlsx", overwrite = TRUE)
 
-
-# quick visual: June 2025 --> June 2026: for sharing with EQB no need to QA this visual
+# quick visual: June 2025 --> October 2026: NO NEED to QA this
 
 # ggplot(total_enrollment_june25,
-#        aes(x = county, y = june25_june26_pct_change)) +
+#        aes(x = county_name, y = medical_enrollment_pct_change)) +
 #   geom_col(fill = "steelblue") +
 #   geom_hline(yintercept = 0, color = "black") +
 #   labs(
 #     title = "Percent Change in Medi-Cal Enrollment by County",
-#     subtitle = "June 2025 to June 2026",
+#     subtitle = "June 2025 to October 2026",
 #     x = "County",
 #     y = "Percent Change (%)"
 #   ) +
@@ -122,6 +124,7 @@ class(total_enrollment_june25)
 #   theme(
 #     axis.text.x = element_text(angle = 90, hjust = 1)
 #   )
+# 
 
 ###### Push this to postgres as a relational table ######
 
@@ -144,7 +147,7 @@ names(charvect) <- names(df)
 
 table_name <- "rel_medical_enrollment_county_jan27"
 schema <- "dashboard"
-indicator <- "Total monthly enrollment of Medi-Cal eligibles (total Medi-Cal universe) expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
+indicator <- "Total monthly enrollment of Medi-Cal eligibles (total Medi-Cal universe) expansion program in June 2025, October 2026, and the percent change in enrollment between June 2025 and October 2026.
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
 qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
@@ -167,14 +170,25 @@ column_comments <- c(
   'county name',
   'geolevel',
   'Total medi-cal enrollment by county for June 2025',
-  'Total medi-cal enrollment by county for June 2026',
-  'Percent change in medi-cal enrollment by county from June 2025 to June 2026')
+  'Total medi-cal enrollment by county for October 2026',
+  'Percent change in medi-cal enrollment by county from June 2025 to October 2026')
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
 # Analysis: Medi-Cal Expansion population: Immigrant enrollment in Medi-Cal -------------------
 
 # We are analyzing specifically the Medi-Cal expansion population to get at immigrants, documented+undocumented, with Medi-Cal
+
+# Check how recent the data is in this raw dataset
+medical_exp_0_19_raw%>%
+  group_by(eligibility_date)%>%
+  summarise(count=n())%>%
+  View() # Up to JULY 2026
+
+medical_exp_19_50plus_raw%>%
+  group_by(reporting_period)%>%
+  summarise(count=n())%>%
+  View() # Up to JULY 2026
 
 # Check how many unique counties are in this dataset and if California state-wide is included
 
@@ -202,22 +216,26 @@ medical_exp_19_50plus_raw %>%
   anti_join(ca_counties %>% st_drop_geometry(),
             by = c("county" = "NAME")) # This has 'Statewide' and 'Statewide total' which explains why there are 60 unique county names instead of 58
 
-
-
 # Start with analysis for age 0-19
 
-expansion_youth_june25<- medical_exp_0_19_raw %>%
-  filter(eligibility_date %in% c("2026-06", "2025-06")) %>%
+# lets first calc for if our end date is 'July 2026' since this is what is most recent in the data
+
+expansion_youth_july26<- medical_exp_0_19_raw %>%
+  filter(eligibility_date %in% c("2026-07", "2025-06")) %>%
   group_by(eligibility_date, county) %>%
   summarise(
     total = sum(number_of_beneficiaries, na.rm = TRUE),
     .groups = "drop"
   ) 
 
+# check how many NAs there are
+
+sum(is.na(expansion_youth_july26$total)) # 0 that is good!
+
+# Originally EQB asked for JUne 2025 --> June 2026 but I think it is OK to move the 'later' date to July 2026 and just create a consistent methodology where our 'end' date is always the most recent data available
 
 # check how many unique  counties there are: 
 length(unique(expansion_youth_june25$county)) # 57 out of 58 one is dropped
-
 
 # Check what is being dropped -- Alpine 
 
@@ -230,8 +248,8 @@ medical_exp_0_19_raw %>%
 
 # revise code so Alpine is not dropped even if it doesn't have data for both our year/month of interest
 
-expansion_youth_june25 <- medical_exp_0_19_raw %>%
-  filter(eligibility_date %in% c("2026-06", "2025-06")) %>%
+expansion_youth_july26 <- medical_exp_0_19_raw %>%
+  filter(eligibility_date %in% c("2026-07", "2025-06")) %>%
   group_by(eligibility_date, county) %>%
   summarise(
     total = sum(number_of_beneficiaries, na.rm = TRUE),
@@ -239,20 +257,20 @@ expansion_youth_june25 <- medical_exp_0_19_raw %>%
   ) %>%
   complete(
     county = unique(medical_exp_0_19_raw$county),
-    eligibility_date = c("2025-06", "2026-06")
+    eligibility_date = c("2025-06", "2026-07")
   )
 # check that worked
-length(unique(expansion_youth_june25$county)) # 58 -- good
+length(unique(expansion_youth_july26$county)) # 58 -- good
 
 # Proceed with calcs
 
-expansion_youth_june25<-expansion_youth_june25%>%
+expansion_youth_july26<-expansion_youth_july26%>%
   rename("month_of_eligibility"="eligibility_date")%>% # make this match other medi-cal dataset 
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   rename_with(~ paste0("expansion_youth_", .x), .cols = 2:3) %>%
   group_by(county)%>%
-  mutate(expansion_youth_pct_change=(expansion_youth_2026_06-expansion_youth_2025_06)/expansion_youth_2025_06*100)%>%
+  mutate(expansion_youth_pct_change=(expansion_youth_2026_07-expansion_youth_2025_06)/expansion_youth_2025_06*100)%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
@@ -264,12 +282,15 @@ expansion_youth_june25<-expansion_youth_june25%>%
 ungroup()
 
 # one last check 
-length(unique(expansion_youth_june25$county)) # 58 -- good
+length(unique(expansion_youth_july26$county_name)) # 58 -- good
+
 
 # now analyze separately for the 19+ expansion population
 
-expansion_adult_june25<- medical_exp_19_50plus_raw %>%
-  filter(reporting_period %in% c("2026-06", "2025-06")) %>%
+# Calcs using June 2026 as end date
+
+expansion_adult_july26<- medical_exp_19_50plus_raw %>%
+  filter(reporting_period %in% c("2026-07", "2025-06")) %>%
   rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset
   group_by(month_of_eligibility, county) %>%
   summarise(
@@ -278,28 +299,46 @@ expansion_adult_june25<- medical_exp_19_50plus_raw %>%
   ) %>%
   complete(
     county = unique(medical_exp_0_19_raw$county),
-    month_of_eligibility = c("2025-06", "2026-06")
+    month_of_eligibility = c("2025-06", "2026-07")
+  )
+
+# how many NAs are there:
+sum(is.na(expansion_adult_july26$total)) # only 2
+
+# Now perform calcs using Oct 2026 as end date
+
+expansion_adult_july26<- medical_exp_19_50plus_raw %>%
+  filter(reporting_period %in% c("2026-07", "2025-06")) %>%
+  rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset
+  group_by(month_of_eligibility, county) %>%
+  summarise(
+    total = sum(number_of_eligible_individuals, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  complete(
+    county = unique(medical_exp_0_19_raw$county),
+    month_of_eligibility = c("2025-06", "2026-07")
   )
 
 # quick check we aggregated all the age groups to get a combined total for age 19
 
 check<-medical_exp_19_50plus_raw%>%
   filter(county=='Alameda')%>%
-  filter(reporting_period %in% c("2026-06")) %>%
-  summarise(total=sum(number_of_eligible_individuals)) #17471 for June 2026
+  filter(reporting_period %in% c("2026-07")) %>%
+  summarise(total=sum(number_of_eligible_individuals)) #17031 for July 2026
 
-expansion_adult_june25%>%
+expansion_adult_july26%>%
   filter(county=="Alameda")%>%
-  View() #17471 for June 2026 -- good
+  View() #17031 for July 2026 -- good
 
 # continue with calcs and pivoting table wider
 
-expansion_adult_june25<-expansion_adult_june25%>%
+expansion_adult_july26<-expansion_adult_july26%>%
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   rename_with(~ paste0("expansion_adult_", .x), .cols = 2:3) %>%
   group_by(county)%>%
-  mutate(expansion_enrollment_pct_change=(expansion_adult_2026_06-expansion_adult_2025_06)/expansion_adult_2025_06*100)%>%
+  mutate(expansion_enrollment_pct_change=(expansion_adult_2026_07-expansion_adult_2025_06)/expansion_adult_2025_06*100)%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
@@ -313,32 +352,38 @@ expansion_adult_june25<-expansion_adult_june25%>%
 
 
 # check number of unique counties 
-length(unique(expansion_adult_june25$county_name)) # 58 good
+length(unique(expansion_adult_july26$county_name)) # 58 good
+
+# check NAs
+sum(is.na(expansion_adult_july26$expansion_enrollment_pct_change)) # from 2 to 3? --looking at it I see its because Sierra and Trinity counties had 0 enrollment for both June 2025 and July 2026 -thats OK
 
 # Join tables together to calculate for TOTAL expansion population not disaggregated by age groups
 
-expansion_total_june25<-expansion_youth_june25%>%
-  left_join(expansion_adult_june25)%>%
+expansion_total_july26<-expansion_youth_july26%>%
+  left_join(expansion_adult_july26)%>%
   select(-ends_with(".y")) %>% # clean up the duplicate columns from the join
   rename_with(~ str_remove(.x, "\\.x$"), ends_with(".x"))%>% # clean up column names
   
   # calculate total enrollment and percent change
   group_by(county_geoid)%>%
   mutate(expansion_total_2025_06=expansion_youth_2025_06+expansion_adult_2025_06,
-         expansion_total_2026_06=expansion_youth_2026_06+expansion_adult_2026_06,
-         expansion_total_pct_change=(expansion_total_2026_06-expansion_total_2025_06)/expansion_total_2025_06*100)%>%
+         expansion_total_2026_07=expansion_youth_2026_07+expansion_adult_2026_07,
+         expansion_total_pct_change=(expansion_total_2026_07-expansion_total_2025_06)/expansion_total_2025_06*100)%>%
   mutate(across(where(is.numeric), ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
 ungroup()
 
 # check class-- good
-class(expansion_total_june25)
+class(expansion_total_july26)
 
 # check final unique county count
-length(unique(expansion_total_june25$county_name)) # 58 good!
+length(unique(expansion_total_july26$county_name)) # 58 good!
+
+# check NAs
+sum(is.na(expansion_total_july26$expansion_enrollment_pct_change)) # 3 good
 
 ###### Push Medi-cal expansion enrollment table to postgres ######
 
-df<-expansion_total_june25 # assign as 'df'
+df<-expansion_total_july26 # assign as 'df'
 
 # make sure no trailing spaces anywhere
 
@@ -357,7 +402,7 @@ names(charvect) <- names(df)
 
 table_name <- "rel_medical_enrollment_expansion_county_jan27"
 schema <- "dashboard"
-indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, June 2026, and the percent change in enrollment between June 2025 and June 2026.
+indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, July 2026, and the percent change in enrollment between June 2025 and July 2026.
 Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
 for age 0-10 and age 19+ Original data source: https:\\data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
@@ -381,21 +426,219 @@ column_comments <- column_comments <- c(
   'county name',
   'geolevel',
   'Total medi-cal expansion enrollment by county for June 2025 for age 0-19',
-  'Total medi-cal expansion enrollment by county for June 2026 for age 0-19',
-  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for age 0-19',
+  'Total medi-cal expansion enrollment by county for July 2026 for age 0-19',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to July 2026 for age 0-19',
   'Total medi-cal expansion enrollment by county for June 2025 for adults 19 plus',
-  'Total medi-cal expansion enrollment by county for June 2026 for adults 19 plus',
-  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for adults 19 plus',
+  'Total medi-cal expansion enrollment by county for July 2026 for adults 19 plus',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to July 2026 for adults 19 plus',
   'Total medi-cal expansion enrollment by county for June 2025 for entire medi-cal expansion population',
-  'Total medi-cal expansion enrollment by county for June 2026 for entire medi-cal expansion population',
-  'Percent change in medi-cal expansion enrollment by county from June 2025 to June 2026 for entire medi-cal expansion population'
+  'Total medi-cal expansion enrollment by county for July 2026 for entire medi-cal expansion population',
+  'Percent change in medi-cal expansion enrollment by county from June 2025 to July 2026 for entire medi-cal expansion population'
+)
+
+add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+
+# Analyis:  Medi-Cal enrollment by aid category -----------------------
+
+# See what the most recent data is
+medical_aid_raw%>%
+  group_by(month_of_eligibility)%>%
+  summarise(count=n())%>%
+  View() # Up to OCT 2026
+
+# Lets stick with June 2025 as the base and compare to---> OCT 2026 
+
+aid_enrollment_oct26<- medical_aid_raw %>%
+  filter(month_of_eligibility %in% c("2026-10", "2025-06")) %>%
+  group_by(month_of_eligibility, county, aid_category) %>%
+  summarise(
+    count = sum(total_eligibles, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(month_of_eligibility, county) %>%
+  mutate(total = sum(count)) %>%
+  ungroup()%>%
+  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
+  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
+  group_by(county, aid_category)%>%
+  mutate(june25_oct26_pct_change=(count_2026_10-count_2025_06)/count_2025_06*100)
+
+
+
+# how many NAs
+sum(is.na(aid_enrollment_oct26$june25_oct26_pct_change)) # only 4 -Alpine, Mono for small AID groups makes sense
+
+# export this as a xlsx file:
+# write.xlsx(aid_enrollment_oct26,
+#            file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_aid_june25_oct26.xlsx", overwrite = TRUE)
+
+# how many unique counties:
+
+length(unique(aid_enrollment_oct26$county)) # 60 when it should be 58
+
+aid_enrollment_oct26%>%
+  group_by(county)%>%
+  summarise(count=n())%>%
+  View() ## the two are: Suppressed Cell Total, STATEWIDE
+
+# remove the 2 non county rows
+aid_enrollment_oct26<-aid_enrollment_oct26%>%
+  filter(!grepl("Suppressed Cell Total|STATEWIDE", county))
+
+# check:
+length(unique(aid_enrollment_oct26$county)) # good now 58 counties
+
+# Continue making this into a rel table:
+
+# recode aid_category values to be more concise and remove the STATEWIDE and SUPPRESSED CELL rows so only counties remain
+medical_aid_re<-medical_aid_raw%>%
+  filter(!grepl("Suppressed Cell Total|STATEWIDE", county))%>%
+  mutate(aid_category_re=ifelse(aid_category %in% "ACA Expansion Adult Age 19 to 64", "aca_exp_adult",
+                                ifelse(aid_category %in% "Adoption/Foster Care", "adopt_foster",
+                                       ifelse(aid_category %in% "CHIP", "chip",
+                                              ifelse(aid_category %in% "LTC", "ltc",
+                                                     ifelse(aid_category %in% "Other", "other",
+                                                            ifelse(aid_category %in% "Parent/Caretaker Relative & Child", "parent_caretaker",
+                                                                   ifelse(aid_category %in% "Seniors and Persons with Disabilities", "senior_disabled",
+                                                                          "Did not get recoded"))))))))
+
+# check that worked
+table(medical_aid_re$aid_category) # good 
+table(medical_aid_re$aid_category_re) # good -
+
+# pivot table wide
+
+aid_enrollment_oct26<-medical_aid_re %>%
+  filter(month_of_eligibility %in% c("2026-10", "2025-06")) %>%
+  pivot_wider(
+    id_cols = county,
+    names_from = c(aid_category_re, month_of_eligibility),
+    values_from = total_eligibles,
+    names_glue = "{aid_category_re}_{month_of_eligibility}",
+    values_fill = 0)%>%
+  rename_with(~ gsub("-", "_", .x))   # clean up column names
+
+# proceed with calcs
+
+aid_enrollment_oct26<-aid_enrollment_oct26%>%
+  group_by(county)%>%
+  mutate(
+    across(
+      ends_with("_2025_06"),
+      ~ {
+        col_2026 <- sub("2025_06$", "2026_10", cur_column())
+        
+        if_else(
+          .x == 0,
+          NA_real_,
+          (get(col_2026) - .x) / .x * 100
+        )
+      },
+      .names = "{sub('_2025_06$', '', .col)}_pct_change"
+    )
+  )
+
+# Check the calculation worked: values match, looks good!
+
+aid_enrollment_oct26%>%
+  filter(county=="San Diego")%>%
+  mutate(chip_qa=(chip_2026_10-chip_2025_06)/chip_2025_06*100)%>%
+  select(chip_qa, chip_pct_change)%>%
+  View()
+
+
+# Now add in county geoids and clean up column names to match workflow
+
+  
+aid_enrollment_oct26<-aid_enrollment_oct26%>%
+  left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
+  mutate(geolevel="county")%>%
+  rename("county_name"="county",
+         "county_geoid"="GEOID")%>%
+  select(county_geoid, county_name, geolevel, everything()) %>%
+  mutate(across(where(is.numeric),
+                ~ replace(.x, is.infinite(.x) | is.nan(.x), NA_real_)))%>% # replace all Inf and NaN with NULL
+  select(-geometry)%>%
+  ungroup()
+
+# check class of final df -- good
+class(aid_enrollment_oct26)
+
+
+###### Push Medi-Cal Aid table to postgres ######
+
+df<-aid_enrollment_oct26 # assign as 'df'
+
+# make sure no trailing spaces anywhere
+
+names(df) <- gsub(" ", "", names(df))
+
+df <- df %>%
+  mutate(across(where(is.character), ~ replace(.x, .x == " ", "")))
+
+# set column types
+
+charvect <- rep("numeric", ncol(df))
+charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
+names(charvect) <- names(df)
+
+# set table info
+
+table_name <- "rel_medical_enrollment_aid_county_jan27"
+schema <- "dashboard"
+indicator <- "Total enrollment in the Medi-Cal by aid program in June 2025, October 2026, and the percent change in enrollment between June 2025 and October 2026.
+ Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
+source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
+qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+table_comment <- paste0(indicator, source)
+
+# push to postgres
+
+dbWriteTable( con,
+              DBI::Id(schema = schema, table = table_name),
+              df,
+              overwrite = TRUE, row.names = FALSE,
+              field.types = charvect)
+
+# add meta data
+
+column_names <- colnames(df) # Get column names
+
+column_comments <- column_comments <- c(
+  'county geoid',
+  'county name',
+  'geolevel',
+  'Total medi-cal enrollment in aca expansion adult aid category by county for October 2026',
+  'Total medi-cal enrollment in the adopted/foster aid category by county for October 2026',
+  'Total medi-cal enrollment in the CHIP aid category by county for October 2026',
+  'Total medi-cal enrollment in the LTC aid category by county for October 2026',
+  'Total medi-cal enrollment in the OTHER aid category by county for October 2026',
+  'Total medi-cal enrollment in the parent or caretaker with child aid category by county for October 2026',
+  'Total medi-cal enrollment in the senior disabled aid category by county for October 2026',
+  
+  'Total medi-cal enrollment in aca expansion adult aid category by county for June 2025',
+  'Total medi-cal enrollment in the adopted/foster aid category by county for June 2025',
+  'Total medi-cal enrollment in the CHIP aid category by county for June 2025',
+  'Total medi-cal enrollment in the LTC aid category by county for June 2025',
+  'Total medi-cal enrollment in the OTHER aid category by county for June 2025',
+  'Total medi-cal enrollment in the parent or caretaker with child aid category by county for June 2025',
+  'Total medi-cal enrollment in the senior disabled aid category by county for June 2025',
+  
+  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the aca expansion adult aid category by county',
+  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the adopted/foster aid category by county for June 2025',
+  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the CHIP aid category by county',
+  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the LTC aid category by county',
+  'Percent change in medi-cal enrollment from June 2025 to october 2026t in the OTHER aid category by county',
+  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the parent or caretaker with child aid category by county5',
+  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the senior disabled aid category by county'
+  
+
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
 
-
-# Analysis: Medi-Cal enrollment by race: NOT READY FOR QA YET 11/20/26----------------------
+# RACE ANALYSIS: HANDING OFF TO ALICIA: NOT READY FOR QA YET 11/20/26----------------------
 
 # Create separate relational table for medi-cal monthly enrollment and percent change between June 2025 and June 2026 by race
 
@@ -433,7 +676,7 @@ race_enrollment_june25<- medical_race_raw %>%
     across(
       ends_with("_2025_06"),
       ~ {
-        col_2026 <- sub("2025_06$", "2026_06", cur_column())
+        col_2026 <- sub("2025_06$", "2026_10", cur_column())
         
         if_else(
           .x == 0,
@@ -450,7 +693,7 @@ race_enrollment_june25<- medical_race_raw %>%
 
 check<-race_enrollment_june25%>%
   filter(county=="San Diego")%>%
-  mutate(latinx_qa=(latinx_2026_06-latinx_2025_06)/latinx_2025_06*100)%>%
+  mutate(latinx_qa=(latinx_2026_10-latinx_2025_06)/latinx_2025_06*100)%>%
   select(latinx_qa, latinx_pct_change)
 
 rm(check)
@@ -475,32 +718,6 @@ class(race_enrollment_june25)
 
 # MISC DATA EXPLORATION: Not pushing to postgres : DOES NOT NEED QA RIGHT NOW 11/10/26 -----------------------------------
 
-######  Medi-Cal enrollment by aid category ######
-
-# I feel like this one is probably more for the grants but won't be on the dashboard. OK to keep in long format?
-
-# Lets stick with June 2025 as the base and compare to---> June 2026 
-
-aid_enrollment_june25<- medical_aid_raw %>%
-  filter(month_of_eligibility %in% c("2026-06", "2025-06")) %>%
-  group_by(month_of_eligibility, county, aid_category) %>%
-  summarise(
-    count = sum(total_eligibles, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  group_by(month_of_eligibility, county) %>%
-  mutate(total = sum(count)) %>%
-  ungroup()%>%
-  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
-  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
-  group_by(county, aid_category)%>%
-  mutate(june25_june26_pct_change=(count_2026_06-count_2025_06)/count_2025_06*100)
-
-
-# export this as a xlsx file:
-write.xlsx(aid_enrollment_june25,
-           file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_aid_june25_june26.xlsx", overwrite = TRUE)
-
 ###### Language Spoken Medi-Cal enrollment ######
 
 medical_lang_june25<- medical_lang_raw %>%
@@ -516,7 +733,7 @@ medical_lang_june25<- medical_lang_raw %>%
   pivot_wider(names_from=month_of_eligibility, values_from=c("count","total"))%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   group_by(county, language)%>%
-  mutate(june25_june26_pct_change=(count_2026_06-count_2025_06)/count_2025_06*100)
+  mutate(june25_june26_pct_change=(count_2026_10-count_2025_06)/count_2025_06*100)
 
 # export this as a xlsx file:
 write.xlsx(medical_lang_june25,
