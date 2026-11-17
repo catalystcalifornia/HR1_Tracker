@@ -16,25 +16,26 @@ filepath <- "W:/Project/ECI/HR 1 Tracker/Data/CalFresh/Master data PUBLIC ACCESS
 calfresh_raw <- read_excel(filepath, sheet="Monthly", skip=1, guess_max = Inf) %>%
   clean_names()
 
-# Filter for CalFresh data June 2025/26
-calfresh_june_25_26 <- calfresh_raw %>%
-  filter(calendar_year %in% c(2025,2026), month %in% c("June"))
+# Filter for CalFresh data June 2025/August 2026
+calfresh_25_26 <- calfresh_raw %>%
+  filter((calendar_year == 2025 & month == "June") |
+         (calendar_year == 2026 & month == "August"))
 
 ########### Total Enrollment ----
 # Data on number of persons in CalFresh and percent change from June 2025 to 2026
-enrollment <- calfresh_june_25_26 %>%
+enrollment <- calfresh_25_26 %>%
   select(county, calendar_year, cal_fresh_persons) %>%
   pivot_wider(
     names_from = calendar_year,
     values_from = cal_fresh_persons,
-    names_prefix = "calfresh_persons_",
-    names_glue = "calfresh_persons_{calendar_year}_06") %>%
-  mutate(calfresh_persons_pct_change = (calfresh_persons_2026_06 - calfresh_persons_2025_06) / calfresh_persons_2025_06 * 100)
+    names_prefix = "calfresh_enrollment_",
+    names_glue = "calfresh_enrollment_{calendar_year}") %>%
+  mutate(calfresh_enrollment_pct_change = (calfresh_enrollment_2026 / calfresh_enrollment_2025 - 1)  * 100)
 
 # QA: Looking at data on number of households, and caseloads by age + race. Note that
 # the households is always much greater than the number of caseloads. I do not understand
 # why so I don't trust the age+race columns.
-qa <- calfresh_june_25_26 %>%
+qa <- calfresh_25_26 %>%
   select(county, date, month, calendar_year, 
          cal_fresh_persons, cal_fresh_households,
          contains("caseload_age_total"),
@@ -57,20 +58,25 @@ counties <- ca_counties %>%
 enrollment_county <- counties %>%
   left_join(enrollment, by = c("county_name" = "county")) %>%
   mutate(geolevel = "county", .after = county_name) %>%
-  arrange(desc(calfresh_persons_pct_change))
-summary(enrollment_county$calfresh_persons_pct_change)
+  arrange(calfresh_enrollment_pct_change)
+summary(enrollment_county$calfresh_enrollment_pct_change)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# -11.508  -6.825  -4.913  -4.979  -3.146   1.996 
+# -11.865  -7.856  -5.715  -5.783  -4.058   2.31
 
 final_df <- enrollment_county
 ########### Push to Postgres ----
 # Write table with metadata
 table_name <- "rel_calfresh_totalenrollment_county_jan27"
 schema <- "dashboard"
-indicator <- "A table with the June 2025 and June 2026 CalFresh enrollment rates by county, using the
-total number of CalFresh persons (not households). Includes the percent change
-in enrollment from June 2025 to June 2026. Data from California Dept. of
-Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard"
+indicator <- "A table of the percent change in CalFresh enrollment from June 2025
+to August 2026 by county, using the total number of CalFresh persons (not households). 
+The table is in ascending order by the percent change column.
+
+Summary statistics for the percent change are  
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+ -11.865  -7.856  -5.715  -5.783  -4.058   2.31
+ 
+Data from California Dept. of Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard"
 source <- "Script: W:/Project/ECI/HR 1 Tracker/Github/AV/HR1_Tracker/Analysis/rel_calfresh_enrollment.R "
 qa_filepath <- "W:/Project/ECI/HR 1 Tracker/Documentation/QA_rel_calfresh_enrollment.docx"
 
@@ -83,8 +89,8 @@ column_comments <- c(
   "Name of county",
   "County level table",
   "Number of persons enrolled in CalFresh during June 2025",
-  "Number of persons enrolled in CalFresh during June 2026",
-  "Percent change of persons enrolled in CalFresh from June 2025 to June 2026"
+  "Number of persons enrolled in CalFresh during August 2026",
+  "Percent change of persons enrolled in CalFresh from June 2025 to August 2026"
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
