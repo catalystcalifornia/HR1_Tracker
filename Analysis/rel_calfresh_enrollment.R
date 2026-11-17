@@ -22,7 +22,7 @@ calfresh_25_26 <- calfresh_raw %>%
          (calendar_year == 2026 & month == "August"))
 
 ########### Total Enrollment ----
-# Data on number of persons in CalFresh and percent change from June 2025 to 2026
+# Data on number of persons in CalFresh and percent change from June 2025 to August 2026
 enrollment <- calfresh_25_26 %>%
   select(county, calendar_year, cal_fresh_persons) %>%
   pivot_wider(
