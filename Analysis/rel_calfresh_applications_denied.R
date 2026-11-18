@@ -67,7 +67,7 @@ indicator <- "A table with the June 2025 and August 2026 CalFresh application de
 rates by county and the percent change in denial rate. Statewide, the percent change 
 is -15.26 and across counties, the standard deviation is 24.37.
 
-Summary statistics for the percent change are
+Summary statistics for the percent change across counties are
     Min.  1st Qu.   Median     Mean  3rd Qu.     Max.     NAs 
 -100.000  -26.946  -16.499  -18.795   -9.076   51.123        2        
 
@@ -130,7 +130,7 @@ indicator <- "A table with the June 2025 and August 2026 CalFresh ineligibility 
 rates by county and the percent change in denial rate. Statewide, the percent change is 5.84 and 
 across counties, the standard deviation is 103.57.
 
-Summary statistics for the percent change are
+Summary statistics for the percent change across counties are
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NAs 
 -100.00  -25.36    0.00   14.71   21.42  629.45       3 
 
@@ -189,7 +189,7 @@ by county and the percent change in the numbers of applications received. Statew
 the percent change is 5.97 and across counties, the standard 
 deviation is 32.88.
 
-Summary statistics for the percent change are
+Summary statistics for the percent change across counties are
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NAs 
 -36.364  -4.230   1.064   8.861   8.208 192.456       2 
 
