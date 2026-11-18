@@ -45,16 +45,6 @@ dollars_per_enrollee <- calfresh_25_26 %>%
             (calfresh_dollars_per_enrollee_2026 / calfresh_dollars_per_enrollee_2025_real - 1) * 100) %>%
   select(county, calfresh_dollars_per_enrollee_2025, calfresh_dollars_per_enrollee_2025_real, everything())
 
-# When NOT adjusted for inflation
-summary(dollars_per_enrollee$calfresh_dollars_per_enrollee_pct_change_nominal)
-# Min.  1st Qu.   Median     Mean  3rd Qu.     Max. 
-# -5.00055 -1.11521 -0.02043 -0.15646  0.74627  3.51672
-
-# When adjusted for inflation, the percent change in $/enrollee is MORE negative
-summary(dollars_per_enrollee$calfresh_dollars_per_enrollee_pct_change) 
-# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# -7.4981 -3.7149 -2.6489 -2.7814 -1.9024  0.7952 
-
 # Pulling CA county geoids, names
 ca_counties <- dbGetQuery(con_shared, "SELECT statefp, countyfp, name AS county_name FROM geographies_ca.cb_2023_06_county_500k")
 counties <- ca_counties %>%
@@ -66,6 +56,19 @@ dollars_per_enrollee_county <- counties %>%
   left_join(dollars_per_enrollee, by = c("county_name" = "county")) %>%
   mutate(geolevel = "county", .after = county_name) %>%
   arrange(calfresh_dollars_per_enrollee_pct_change)
+
+# When NOT adjusted for inflation
+summary(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change_nominal)
+# Min.   1st Qu.    Median      Mean   3rd Qu.      Max. 
+# -5.000555 -1.117084  0.003739 -0.157235  0.759826  3.516716
+
+# When adjusted for inflation, the percent change in $/enrollee is MORE negative
+summary(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change) 
+# Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+# -7.4981 -3.7167 -2.6254 -2.7821 -1.8892  0.7952 
+
+sd(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change)
+# std dev = 1.501287
 
 final_df <- dollars_per_enrollee_county %>%
   select(county_geoid:geolevel, 
@@ -80,15 +83,16 @@ table_name <- "rel_calfresh_dollars_per_enrollee_county_jan27"
 schema <- "dashboard"
 indicator <- "A table with the June 2025 and August 2026 percent change in CalFresh 
 dollars per enrollee by county, using the total number of CalFresh persons (not households). 
-Essentially, dollars per enrollee is a measure of how much each CalFresh enrollee
-receives per month on average. Note that the percent change is adjusted for inflation, 
-specifically using the Consumer Price Index food at home index. For reference, the Consumer Price 
-Index food at home prices rose 2.7% from June 2025 to June 2026. 
-The table is in ascending order by the percent change column.
+Note that the percent change is adjusted for inflation, specifically using the 
+Consumer Price Index food at home index. For reference, the Consumer Price 
+Index food at home prices rose 2.7% from June 2025 to June 2026.
 
-Summary statistics for the percent change are
+Statewide, the percent change is -2.73 and across counties, the standard deviation 
+is 1.50.
+
+Summary statistics for the percent change across counties are
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
--7.4981 -3.7149 -2.6489 -2.7814 -1.9024  0.7952 
+-7.4981 -3.7167 -2.6254 -2.7821 -1.8892  0.7952 
 
 Data from California Dept. of Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard 
 and Consumer Price Index data from https://www.bls.gov/opub/ted/2026/consumer-prices-up-3-5-percent-over-the-year-ended-june-2026.htm"
