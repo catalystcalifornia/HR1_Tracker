@@ -18,6 +18,8 @@ calfresh_raw <- read_excel(filepath, sheet="Monthly", skip=1, guess_max = Inf) %
 
 # Filter for CalFresh data June 2025/August 2026
 calfresh_25_26 <- calfresh_raw %>%
+  select(county, month, calendar_year, cal_fresh_persons) %>%
+  filter(calendar_year %in% c(2025,2026)) %>% # most recent data is August 2026
   filter((calendar_year == 2025 & month == "June") |
          (calendar_year == 2026 & month == "August"))
 
@@ -63,6 +65,9 @@ summary(enrollment_county$calfresh_enrollment_pct_change)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 # -11.865  -7.856  -5.715  -5.783  -4.058   2.31
 
+sd(enrollment_county$calfresh_enrollment_pct_change)
+# std dev = 2.916159
+
 final_df <- enrollment_county
 ########### Push to Postgres ----
 # Write table with metadata
@@ -70,7 +75,8 @@ table_name <- "rel_calfresh_totalenrollment_county_jan27"
 schema <- "dashboard"
 indicator <- "A table of the percent change in CalFresh enrollment from June 2025
 to August 2026 by county, using the total number of CalFresh persons (not households). 
-The table is in ascending order by the percent change column.
+Statewide, the percent change is -7.50 and across counties, the standard
+deviation is 2.91.
 
 Summary statistics for the percent change are  
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
