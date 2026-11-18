@@ -972,10 +972,3 @@ race_enrollment_june25<-race_enrollment_june25%>%
 
 # check resulting table is a  df -- good
 class(race_enrollment_june25)
-
-
-
-
-# MISC DATA EXPLORATION: Not pushing to postgres : DOES NOT NEED QA RIGHT NOW 11/10/26 -----------------------------------
-
-###### Language Spoken Medi-Cal enrollment ######
