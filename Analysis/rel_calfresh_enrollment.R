@@ -37,7 +37,9 @@ enrollment <- calfresh_25_26 %>%
 # QA: Looking at data on number of households, and caseloads by age + race. Note that
 # the households is always much greater than the number of caseloads. I do not understand
 # why so I don't trust the age+race columns.
-qa <- calfresh_25_26 %>%
+qa <- calfresh_raw %>%
+  filter((calendar_year == 2025 & month == "June") |
+           (calendar_year == 2026 & month == "August")) %>%
   select(county, date, month, calendar_year, 
          cal_fresh_persons, cal_fresh_households,
          contains("caseload_age_total"),
@@ -78,7 +80,7 @@ to August 2026 by county, using the total number of CalFresh persons (not househ
 Statewide, the percent change is -7.50 and across counties, the standard
 deviation is 2.91.
 
-Summary statistics for the percent change are  
+Summary statistics for the percent change across counties are  
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
  -11.865  -7.856  -5.715  -5.783  -4.058   2.31
  
