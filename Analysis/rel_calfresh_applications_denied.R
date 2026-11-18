@@ -186,7 +186,7 @@ final_df <- rel_applications_received
 table_name <- "rel_calfresh_applications_received_county_jan27"
 indicator <- "A table with the June 2025 and August 2026 number of CalFresh applications received 
 by county and the percent change in the numbers of applications received. Statewide, 
-the percent change has increased by 5.97 and across counties, the standard 
+the percent change is 5.97 and across counties, the standard 
 deviation is 32.88.
 
 Summary statistics for the percent change are
@@ -209,3 +209,6 @@ column_comments <- c(
 )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+
+dbDisconnect(con)
+dbDisconnect(con_shared)
