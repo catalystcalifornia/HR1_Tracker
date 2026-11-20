@@ -89,7 +89,7 @@ after<-"2026-10" # October 2026
 total_enrollment_oct26_qa<-medical_race_raw%>%
   filter(month_of_eligibility==after | month_of_eligibility==before)%>%
   group_by(month_of_eligibility, county)%>%
-  summarise(total=sum(total_eligibles))%>%
+  summarise(total=sum(total_eligibles, na.rm=TRUE))%>%
   ungroup()%>%
   pivot_wider(names_from=month_of_eligibility, values_from=total)%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
@@ -209,7 +209,16 @@ aid_enrollment_oct26<- medical_aid_raw %>%
   group_by(county, aid_category)%>%
   mutate(june25_oct26_pct_change=(count_2026_10-count_2025_06)/count_2025_06*100)
 
-
+aid_enrollment_oct26_qa<- medical_aid_raw %>%
+  filter(month_of_eligibility %in% c(after, before)) %>%
+  group_by(month_of_eligibility, county, aid_category) %>%
+  summarise(
+    count = sum(total_eligibles, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  group_by(month_of_eligibility, county) %>%
+  mutate(total = sum(count)) %>%
+  ungroup()
 
 # how many NAs
 sum(is.na(aid_enrollment_oct26$june25_oct26_pct_change)) # only 4 -Alpine, Mono for small AID groups makes sense
@@ -447,10 +456,18 @@ lang_enrollment_oct26%>%
   select(unknown_2026_10) # does not have 
 
 lang_enrollment_oct26%>%
-  select(missing_unknown_2025_06) # has 
+  select(missing_unknown_2025_06) %>%
+  View() # has 
 
 lang_enrollment_oct26%>%
-  select(unknown_2025_06) # has both unknown AND missing/unknown for 2025
+  select(unknown_2025_06) %>%
+  View() # has both unknown AND missing/unknown for 2025
+
+sort(names(lang_enrollment_oct26)) 
+# hindi_2026_10
+# "missing_unknown_2025_06" "missing_unknown_2026_10"
+# punjabi_2026_10
+# unknown_2025_06
 
 # We should just have one 'missing' language that is a combination of missing/unknown+unknown
 
@@ -459,7 +476,7 @@ lang_enrollment_oct26<-lang_enrollment_oct26%>%
   mutate(unknown_2025_06=unknown_2025_06+missing_unknown_2025_06)%>% # make the 2025 unknown = unknown + unknown/missing
   select(-missing_unknown_2025_06)%>% # now remove the unknown/missing for 2025
   rename("unknown_2026_10"="missing_unknown_2026_10") # rename 2026 to just unknown
-
+sort(names(lang_enrollment_oct26))
 # now see if there is still differences
 
 cols_2025 <- names(lang_enrollment_oct26) %>%
@@ -660,6 +677,7 @@ medical_exp_0_19_raw%>%
 medical_exp_19_50plus_raw%>%
   group_by(reporting_period)%>%
   summarise(count=n())%>%
+  filter(grepl("2026", reporting_period))%>%
   View() # Up to JULY 2026
 
 # Establish before/after times for percent change calcs for Medi-Cal expansion---------------------------
@@ -694,6 +712,8 @@ medical_exp_19_50plus_raw %>%
             by = c("county" = "NAME")) # This has 'Statewide' and 'Statewide total' which explains why there are 60 unique county names instead of 58
 
 # Start with analysis for age 0-19
+
+unique(medical_exp_0_19_raw$eligibility_date)
 
 expansion_youth_july26<- medical_exp_0_19_raw %>%
   filter(eligibility_date %in% c(after_exp, before)) %>%
@@ -764,6 +784,9 @@ length(unique(expansion_youth_july26$county_name)) # 58 -- good
 
 # Calcs using June 2026 as end date
 
+qa <- medical_exp_19_50plus_raw %>%
+  filter(grepl("July 2026",reporting_period), age_group == "26_49")
+
 expansion_adult_july26<- medical_exp_19_50plus_raw %>%
   filter(reporting_period %in% c(after_exp, before)) %>%
   rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset
@@ -819,6 +842,12 @@ sum(is.na(expansion_adult_july26$expansion_enrollment_pct_change)) # from 2 to 3
 
 # Join tables together to calculate for TOTAL expansion population not disaggregated by age groups
 
+qa <- expansion_total_july26<-expansion_youth_july26%>%
+  left_join(expansion_adult_july26)%>%
+  select(-ends_with(".y")) %>% # clean up the duplicate columns from the join
+  rename_with(~ str_remove(.x, "\\.x$"), ends_with(".x")) %>%
+  filter(if_any(everything(), is.na))
+         
 expansion_total_july26<-expansion_youth_july26%>%
   left_join(expansion_adult_july26)%>%
   select(-ends_with(".y")) %>% # clean up the duplicate columns from the join
