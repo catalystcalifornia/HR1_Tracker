@@ -86,7 +86,7 @@ after<-"2026-10" # October 2026
 
 # Lets start with June 2025 as the base and compare to---> OCTOBER 2026 
 
-total_enrollment_oct26_qa<-medical_race_raw%>%
+total_enrollment_oct26<-medical_race_raw%>%
   filter(month_of_eligibility==after | month_of_eligibility==before)%>%
   group_by(month_of_eligibility, county)%>%
   summarise(total=sum(total_eligibles, na.rm=TRUE))%>%
@@ -109,9 +109,6 @@ length(unique(total_enrollment_oct26$county_name)) # 58 -- good
 
 # check resulting table is a df -- good
 class(total_enrollment_oct26)
-
-# 16 NAs because they don't have June 2025 OR October 2026 enrollment figures -seem like smaller areas so this is OK
-sum(is.na(total_enrollment_oct26$medical_enrollment_pct_change))
 
 # export this as a xlsx file: for EQB project team sharing no need to QA this 
  # write.xlsx(total_enrollment_oct26, file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_june25_oct26.xlsx", overwrite = TRUE)
@@ -186,6 +183,10 @@ add_table_comments(con, schema, table_name, indicator, source, qa_filepath, colu
 
 # Analyis:  Medi-Cal enrollment by aid category -----------------------
 
+# To account for the fact that enrollment by aid changes is also driven by changes in overall Medi-Cal enrollment
+# It makes sense to compare the rate of enrollment by aid across our before and after years
+# as opposed to just TOTAL enrollment in each aid group by years. 
+
 # See what the most recent data is
 medical_aid_raw%>%
   group_by(month_of_eligibility)%>%
@@ -193,6 +194,8 @@ medical_aid_raw%>%
   View() # Up to OCT 2026
 
 # Lets stick with June 2025 as the base and compare to---> OCT 2026 
+
+# Methodology 1: Just comparing % change in total enrollment in each aid group 
 
 aid_enrollment_oct26<- medical_aid_raw %>%
   filter(month_of_eligibility %in% c(after, before)) %>%
@@ -209,6 +212,8 @@ aid_enrollment_oct26<- medical_aid_raw %>%
   group_by(county, aid_category)%>%
   mutate(june25_oct26_pct_change=(count_2026_10-count_2025_06)/count_2025_06*100)
 
+# Methodology 2: Compare rate of aid enrollment across our before and after years
+
 aid_enrollment_oct26_qa<- medical_aid_raw %>%
   filter(month_of_eligibility %in% c(after, before)) %>%
   group_by(month_of_eligibility, county, aid_category) %>%
@@ -217,11 +222,24 @@ aid_enrollment_oct26_qa<- medical_aid_raw %>%
     .groups = "drop"
   ) %>%
   group_by(month_of_eligibility, county) %>%
-  mutate(total = sum(count)) %>%
-  ungroup()
+  mutate(total = sum(count),
+         rate=count/total*100) %>%
+ungroup()%>%
+  pivot_wider(names_from=month_of_eligibility, values_from=c("count","total", "rate"))%>%
+  rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
+  group_by(county, aid_category)%>%
+  mutate(june25_oct26_diff=(rate_2026_10-rate_2025_06))
 
-# how many NAs
-sum(is.na(aid_enrollment_oct26$june25_oct26_pct_change)) # only 4 -Alpine, Mono for small AID groups makes sense
+# Join Methodology 1 + Methodology 2 and make side by side comparisons
+
+join<-aid_enrollment_oct26%>%
+  left_join(aid_enrollment_oct26_qa)
+
+# I agree the raw enrollment percent change is NOT the best calc, but the diff in rates is better.
+
+# Assign the QA version with methodology 2 as the main analysis df
+
+aid_enrollment_oct26<-aid_enrollment_oct26_qa
 
 # export this as a xlsx file:
 # write.xlsx(aid_enrollment_oct26,
@@ -243,64 +261,57 @@ aid_enrollment_oct26<-aid_enrollment_oct26%>%
 # check:
 length(unique(aid_enrollment_oct26$county)) # good now 58 counties
 
-# Continue making this into a rel table:
+# Continue making this into a rel table: recode aid_category values using case_when for better formatted columns when we pivot wider
 
-# recode aid_category values to be more concise and remove the STATEWIDE and SUPPRESSED CELL rows so only counties remain
-medical_aid_re<-medical_aid_raw%>%
-  filter(!grepl("Suppressed Cell Total|STATEWIDE", county))%>%
-  mutate(aid_category_re=ifelse(aid_category %in% "ACA Expansion Adult Age 19 to 64", "aca_exp_adult",
-                                ifelse(aid_category %in% "Adoption/Foster Care", "adopt_foster",
-                                       ifelse(aid_category %in% "CHIP", "chip",
-                                              ifelse(aid_category %in% "LTC", "ltc",
-                                                     ifelse(aid_category %in% "Other", "other",
-                                                            ifelse(aid_category %in% "Parent/Caretaker Relative & Child", "parent_caretaker",
-                                                                   ifelse(aid_category %in% "Seniors and Persons with Disabilities", "senior_disabled",
-                                                                          "Did not get recoded"))))))))
-
-# check that worked
-table(medical_aid_re$aid_category) # good 
-table(medical_aid_re$aid_category_re) # good -
-
-# pivot table wide
-
-aid_enrollment_oct26<-medical_aid_re %>%
-  filter(month_of_eligibility %in% c(after, before)) %>%
-  pivot_wider(
-    id_cols = county,
-    names_from = c(aid_category_re, month_of_eligibility),
-    values_from = total_eligibles,
-    names_glue = "{aid_category_re}_{month_of_eligibility}",
-    values_fill = 0)%>%
-  rename_with(~ gsub("-", "_", .x))   # clean up column names
-
-# proceed with calcs
-
-aid_enrollment_oct26<-aid_enrollment_oct26%>%
-  group_by(county)%>%
+aid_enrollment_oct26<- aid_enrollment_oct26 %>%
+  filter(!grepl("Suppressed Cell Total|STATEWIDE", county)) %>%
   mutate(
-    across(
-      ends_with("_2025_06"),
-      ~ {
-        col_2026 <- sub("2025_06$", "2026_10", cur_column())
-        
-        if_else(
-          .x == 0,
-          NA_real_,
-          (get(col_2026) - .x) / .x * 100
-        )
-      },
-      .names = "{sub('_2025_06$', '', .col)}_pct_change"
+    aid_category_re = case_when(
+      aid_category == "ACA Expansion Adult Age 19 to 64" ~ "aca_exp_adult",
+      aid_category == "Adoption/Foster Care" ~ "adopt_foster",
+      aid_category == "CHIP" ~ "chip",
+      aid_category == "LTC" ~ "ltc",
+      aid_category == "Other" ~ "other",
+      aid_category == "Parent/Caretaker Relative & Child" ~ "parent_caretaker",
+      aid_category == "Seniors and Persons with Disabilities" ~ "senior_disabled",
+      TRUE ~ "Did not get recoded"
     )
   )
+
+# check that worked --- none good
+
+aid_enrollment_oct26 %>%
+  filter(aid_category_re == "Did not get recoded") %>%
+  count(aid_category)
+
+table(aid_enrollment_oct26$aid_category) # good 
+table(aid_enrollment_oct26$aid_category_re) # good -
+
+# pivot table wider by aid category
+
+aid_enrollment_oct26<-aid_enrollment_oct26%>%
+  pivot_wider(
+  id_cols = county,
+  names_from = aid_category_re,
+  values_from = c(
+    count_2025_06,
+    count_2026_10,
+    total_2025_06,
+    total_2026_10,
+    rate_2025_06,
+    rate_2026_10,
+    june25_oct26_diff
+  ),
+  names_glue = "{aid_category_re}_{.value}"
+)
 
 # Check the calculation worked: values match, looks good!
 
 aid_enrollment_oct26%>%
   filter(county=="San Diego")%>%
-  mutate(chip_qa=(chip_2026_10-chip_2025_06)/chip_2025_06*100)%>%
-  select(chip_qa, chip_pct_change)%>%
+  mutate(chip_qa=(chip_rate_2026_10-chip_rate_2025_06))%>%
+  select(chip_qa, chip_june25_oct26_diff)%>%
   View()
-
 
 # Now add in county geoids and clean up column names to match workflow
 
@@ -338,9 +349,11 @@ names(charvect) <- names(df)
 
 # set table info
 
-table_name <- "rel_medical_enrollment_aid_county_jan27"
+table_name <- "rel_medical_enrollment_aid_county_jan27_qa"
 schema <- "dashboard"
-indicator <- "Total enrollment in the Medi-Cal by aid program in June 2025, October 2026, and the percent change in enrollment between June 2025 and October 2026.
+indicator <- "Total and rate of enrollment in Medi-Cal by aid programs in June 2025, October 2026, and the difference in those enrollment rates
+between June 2025 and October 2026. For instance, aid program enrollment rates are calculated by taking (aid enrollment / total enrollment in Medi-Cal) for June 2025 and October 2026.
+The rate diff calcs are then made by subtracting the rates from each other: (aid enrollment rate Oct 2026)-(aid enrollment rate in June 2025)
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
 qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
@@ -354,40 +367,109 @@ dbWriteTable( con,
               overwrite = TRUE, row.names = FALSE,
               field.types = charvect)
 
-# add meta data
+# add meta data programmatically
 
-column_names <- colnames(df) # Get column names
+# Get column names
+column_names <- colnames(df)
 
-column_comments <- column_comments <- c(
-  'county geoid',
-  'county name',
-  'geolevel',
-  'Total medi-cal enrollment in aca expansion adult aid category by county for October 2026',
-  'Total medi-cal enrollment in the adopted/foster aid category by county for October 2026',
-  'Total medi-cal enrollment in the CHIP aid category by county for October 2026',
-  'Total medi-cal enrollment in the LTC aid category by county for October 2026',
-  'Total medi-cal enrollment in the OTHER aid category by county for October 2026',
-  'Total medi-cal enrollment in the parent or caretaker with child aid category by county for October 2026',
-  'Total medi-cal enrollment in the senior disabled aid category by county for October 2026',
+# Automatically generate column comments
+column_comments <- case_when(
   
-  'Total medi-cal enrollment in aca expansion adult aid category by county for June 2025',
-  'Total medi-cal enrollment in the adopted/foster aid category by county for June 2025',
-  'Total medi-cal enrollment in the CHIP aid category by county for June 2025',
-  'Total medi-cal enrollment in the LTC aid category by county for June 2025',
-  'Total medi-cal enrollment in the OTHER aid category by county for June 2025',
-  'Total medi-cal enrollment in the parent or caretaker with child aid category by county for June 2025',
-  'Total medi-cal enrollment in the senior disabled aid category by county for June 2025',
+  # Geographic identifiers
+  column_names == "county_geoid" ~ "County GEOID",
+  column_names == "county_name" ~ "County name",
+  column_names == "geolevel" ~ "Geographic level",
   
-  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the aca expansion adult aid category by county',
-  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the adopted/foster aid category by county for June 2025',
-  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the CHIP aid category by county',
-  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the LTC aid category by county',
-  'Percent change in medi-cal enrollment from June 2025 to october 2026t in the OTHER aid category by county',
-  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the parent or caretaker with child aid category by county5',
-  'Percent change in medi-cal enrollment from June 2025 to october 2026 in the senior disabled aid category by county'
+  # Aid category enrollment counts
+  str_detect(column_names, "_count_") ~ paste0(
+    str_remove(column_names, "_count_.*") %>% str_replace_all("_", " "),
+    " enrollment in ",
+    case_when(
+      str_detect(column_names, "2025_06$") ~ "June 2025",
+      str_detect(column_names, "2026_10$") ~ "October 2026",
+      TRUE ~ "unknown date"
+    )
+  ),
   
-
+  # Total Medi-Cal enrollment
+  str_detect(column_names, "_total_") ~ paste0(
+    "Total Medi-Cal enrollment in ",
+    case_when(
+      str_detect(column_names, "2025_06$") ~ "June 2025",
+      str_detect(column_names, "2026_10$") ~ "October 2026",
+      TRUE ~ "unknown date"
+    )
+  ),
+  
+  # Aid category enrollment rates
+  str_detect(column_names, "_rate_") ~ paste0(
+    str_remove(column_names, "_rate_.*") %>% str_replace_all("_", " "),
+    " rate of enrollment out of total Medi-Cal enrollment in ",
+    case_when(
+      str_detect(column_names, "2025_06$") ~ "June 2025",
+      str_detect(column_names, "2026_10$") ~ "October 2026",
+      TRUE ~ "unknown date"
+    )
+  ),
+  
+  # Percentage point differences between June 2025 and October 2026
+  str_detect(column_names, "_june25_oct26_diff$") ~ paste0(
+    str_remove(column_names, "_june25_oct26_diff$") %>%
+      str_replace_all("_", " "),
+    " percentage point change in share of total Medi-Cal enrollment from June 2025 to October 2026"
+  ),
+  
+  # Catch any unmatched columns
+  TRUE ~ "Column description not defined"
 )
+
+# check this worked
+
+# Confirm number of comments matches number of columns
+length(column_comments) == ncol(df)
+
+# Review column names alongside generated comments
+data.frame(
+  column_name = column_names,
+  column_comment = column_comments
+) %>%
+  View()
+
+# Check whether any columns were missed
+column_comments[column_comments == "Column description not defined"]
+
+# column_names <- colnames(df) # Get column names
+# 
+# column_comments <- column_comments <- c(
+#   'county geoid',
+#   'county name',
+#   'geolevel',
+#   'Total medi-cal enrollment in aca expansion adult aid category by county for October 2026',
+#   'Total medi-cal enrollment in the adopted/foster aid category by county for October 2026',
+#   'Total medi-cal enrollment in the CHIP aid category by county for October 2026',
+#   'Total medi-cal enrollment in the LTC aid category by county for October 2026',
+#   'Total medi-cal enrollment in the OTHER aid category by county for October 2026',
+#   'Total medi-cal enrollment in the parent or caretaker with child aid category by county for October 2026',
+#   'Total medi-cal enrollment in the senior disabled aid category by county for October 2026',
+#   
+#   'Total medi-cal enrollment in aca expansion adult aid category by county for June 2025',
+#   'Total medi-cal enrollment in the adopted/foster aid category by county for June 2025',
+#   'Total medi-cal enrollment in the CHIP aid category by county for June 2025',
+#   'Total medi-cal enrollment in the LTC aid category by county for June 2025',
+#   'Total medi-cal enrollment in the OTHER aid category by county for June 2025',
+#   'Total medi-cal enrollment in the parent or caretaker with child aid category by county for June 2025',
+#   'Total medi-cal enrollment in the senior disabled aid category by county for June 2025',
+#   
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the aca expansion adult aid category by county',
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the adopted/foster aid category by county for June 2025',
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the CHIP aid category by county',
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the LTC aid category by county',
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026t in the OTHER aid category by county',
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the parent or caretaker with child aid category by county5',
+#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the senior disabled aid category by county'
+#   
+# 
+# )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
