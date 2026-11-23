@@ -51,25 +51,6 @@ enrollment <- calfresh_25_26 %>%
 # is because we will have to update data later so having clear notation of what year/month we are looking at
 # will make things easier for us in the future.
 
-View(enrollment)
-
-# check unique number of counties
-length(unique(enrollment$county)) # 59, should be 58. I think because state is in here
-
-enrollment%>%
-  group_by(county)%>%
-  summarise(count=n())%>%
-  View() # yes Statewide
-
-# Filter out statewide so we only have counties
-
-enrollment<-enrollment%>%
-  filter(county!="Statewide")
-
-# check that worked
-length(unique(enrollment$county)) # good
-
-
 # QA: Looking at data on number of households, and caseloads by age + race. Note that
 # the households is always much greater than the number of caseloads. I do not understand
 # why so I don't trust the age+race columns.
@@ -129,7 +110,7 @@ final_df <- enrollment_county
 ########### Push to Postgres ----
 
 # Write table with metadata
-table_name <- "rel_calfresh_totalenrollment_county_jan27_qa" # pushing a QA version 
+table_name <- "rel_calfresh_totalenrollment_county_jan27"
 schema <- "dashboard"
 indicator <- "A table of the percent change in CalFresh enrollment from June 2025
 to August 2026 by county, using the total number of CalFresh persons (not households). 
