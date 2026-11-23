@@ -551,14 +551,45 @@ sort(names(lang_enrollment_oct26))
 # punjabi_2026_10
 # unknown_2025_06
 
+# pull out column names for easier self QAing
+colnames<-as.data.frame(colnames(lang_enrollment_oct26))
+
 # We should just have one 'missing' language that is a combination of missing/unknown+unknown
 
-lang_enrollment_oct26<-lang_enrollment_oct26%>%
+# original version before QA: 
+
+lang_enrollment_oct26_v1<-lang_enrollment_oct26%>%
   group_by(county)%>%
   mutate(unknown_2025_06=unknown_2025_06+missing_unknown_2025_06)%>% # make the 2025 unknown = unknown + unknown/missing
   select(-missing_unknown_2025_06)%>% # now remove the unknown/missing for 2025
   rename("unknown_2026_10"="missing_unknown_2026_10") # rename 2026 to just unknown
 sort(names(lang_enrollment_oct26))
+
+v1<-lang_enrollment_oct26_v1%>%
+  select(county, unknown_2026_10)
+
+# QA version using sum and na.rm = TRUE
+
+lang_enrollment_oct26_qa<-lang_enrollment_oct26%>%
+  group_by(county)%>%
+  mutate(unknown_2025_06=sum(unknown_2025_06, missing_unknown_2025_06, na.rm = TRUE))%>% # make the 2025 unknown = unknown + unknown/missing
+  select(-missing_unknown_2025_06)%>% # now remove the unknown/missing for 2025
+  rename("unknown_2026_10"="missing_unknown_2026_10") # rename 2026 to just unknown
+
+# Comparing v1 and the QA version side by side results are the same. Keeping QA version
+
+lang_enrollment_oct26_qa%>%
+  select(county, unknown_2026_10)%>%
+  View()
+
+# check resulting names in qa version
+
+sort(names(lang_enrollment_oct26_qa))
+qa_colnames<-as.data.frame(colnames(lang_enrollment_oct26_qa)) # only "unknown" remaining for 2025 and 2026 - good!
+
+# assign qa version as main analysis table
+lang_enrollment_oct26<-lang_enrollment_oct26_qa
+
 # now see if there is still differences
 
 cols_2025 <- names(lang_enrollment_oct26) %>%
@@ -631,6 +662,12 @@ lang_enrollment_oct26%>%
   mutate(korean_qa=(korean_2026_10-korean_2025_06)/korean_2025_06*100)%>%
   select(korean_qa, korean_pct_change)%>%
   View()
+
+# Method option 2: Calculate percent medi-cal enrollment by language spoken out of total Medi-Cal enrollment
+# Then compare the difference in percents across our 'before' and 'after' year.
+# This would account  for enrollment changes to Medi-Cal in general
+
+
 
 
 # Now add in county geoids and clean up column names to match workflow
