@@ -41,6 +41,30 @@ ca_counties <- counties(
   year = 2026,
   cb = FALSE
 )
+# Establish before/after times for percent change calcs---------------------------
+
+# Set your percent time change START and END times here: this way if we want to make changes we only have to reset it once here
+
+before<-"2025-06" # June 2025
+after<-"2026-10" # October 2026
+
+# Create a relational table for total medi-cal population-----------------------------
+
+# Create a relational table with Medi-Cal total enrollment for each year/month of interest as defined in our 'before' and 'after' time breaks
+# This can be helpful for each subsequent analysis when we are calculating rates of enrollment out of total Medi-Cal enrollment
+
+medical_tot<-medical_lang_raw%>%
+  group_by(county, month_of_eligibility)%>%
+  filter(month_of_eligibility %in% c(after, before)) %>%
+  summarise(total=sum(total_eligibles, na.rm=TRUE))%>%
+  pivot_wider(
+    id_cols = county,
+    names_from = c(month_of_eligibility),
+    values_from = total,
+    names_glue = "total_{month_of_eligibility}",
+    values_fill = 0)%>%
+  rename_with(~ gsub("-", "_", .x))%>%   # clean up column names
+  filter(county!="STATEWIDE") # remove 'STATEWIDE' 
 
 # Data exploration: Does not need full QA------------------------
 
@@ -49,15 +73,15 @@ ca_counties <- counties(
 # To do this lets take a single county / time period and add the subcategories fore two tables and see if the totals are the same
 total_race_lac<-medical_race_raw%>%
   filter(county=="Los Angeles" & month_of_eligibility=="2026-10")%>%
-  summarise(total=sum(total_eligibles)) # 3622919
+  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 3622919
 
 total_aid_lac<-medical_aid_raw%>%
   filter(county=="Los Angeles" & month_of_eligibility=="2026-10")%>%
-  summarise(total=sum(total_eligibles)) # 3622919 --  the same
+  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 3622919 --  the same
 
 total_lang_lac<-medical_lang_raw%>%
   filter(county=="Los Angeles" & month_of_eligibility=="2026-10")%>%
-  summarise(total=sum(total_eligibles)) # 3622919 --  the same
+  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 3622919 --  the same
 
 # Time bench marks from EQB: 
 # Before HR 1 benchmark: June 2025
@@ -73,13 +97,6 @@ table(medical_aid_raw$month_of_eligibility) # missing here too
 # Methodology decision (also written in QA doc): Because Medi-Cal enrollment in general does not to be very seasonal, based on enrollment mapped quarterly from 2012-2026 here: https://www.chcf.org/medi-cal-enrollment-tracker/?__cf_chl_tk=m6KSwdY9YPwajvB51aKhJNNg93R3CSKvRXpLu7SgEMA-1794865612-1.0.1.1-qzn.Um1gXbwHmwfqqAykoa0nSQQ4pC6tO33moTcbVQk
 # I feel OK with moving up the 'later' comparison date so that the 'before' and 'after' months are not the same. 
 # This way we are measuring more 'after' HR 1
-
-# Establish before/after times for percent change calcs---------------------------
-
-# Set your percent time change START and END times here: this way if we want to make changes we only have to reset it once here
-
-before<-"2025-06" # June 2025
-after<-"2026-10" # October 2026
 
 
 # Analysis: Total Medi-Cal enrollment -----------------------
@@ -551,36 +568,16 @@ sort(names(lang_enrollment_oct26))
 # punjabi_2026_10
 # unknown_2025_06
 
-# pull out column names for easier self QAing
+# pull out column names for easier self QAing --if you filter for 'unknown' here you see the problem
 colnames<-as.data.frame(colnames(lang_enrollment_oct26))
 
 # We should just have one 'missing' language that is a combination of missing/unknown+unknown
-
-# original version before QA: 
-
-lang_enrollment_oct26_v1<-lang_enrollment_oct26%>%
-  group_by(county)%>%
-  mutate(unknown_2025_06=unknown_2025_06+missing_unknown_2025_06)%>% # make the 2025 unknown = unknown + unknown/missing
-  select(-missing_unknown_2025_06)%>% # now remove the unknown/missing for 2025
-  rename("unknown_2026_10"="missing_unknown_2026_10") # rename 2026 to just unknown
-sort(names(lang_enrollment_oct26))
-
-v1<-lang_enrollment_oct26_v1%>%
-  select(county, unknown_2026_10)
-
-# QA version using sum and na.rm = TRUE
 
 lang_enrollment_oct26_qa<-lang_enrollment_oct26%>%
   group_by(county)%>%
   mutate(unknown_2025_06=sum(unknown_2025_06, missing_unknown_2025_06, na.rm = TRUE))%>% # make the 2025 unknown = unknown + unknown/missing
   select(-missing_unknown_2025_06)%>% # now remove the unknown/missing for 2025
   rename("unknown_2026_10"="missing_unknown_2026_10") # rename 2026 to just unknown
-
-# Comparing v1 and the QA version side by side results are the same. Keeping QA version
-
-lang_enrollment_oct26_qa%>%
-  select(county, unknown_2026_10)%>%
-  View()
 
 # check resulting names in qa version
 
@@ -635,9 +632,11 @@ expected_2025 <- sub("2026_10$", "2025_06", cols_2026)
 
 setdiff(expected_2025, names(lang_enrollment_oct26)) # no more ! 
 
+# Methodology option 1: Percent change in total enrollees by language spoken 
+
 # proceed with calcs:
 
-lang_enrollment_oct26<-lang_enrollment_oct26%>%
+lang_enrollment_oct26_opt1<-lang_enrollment_oct26%>%
   group_by(county)%>%
   mutate(
     across(
@@ -657,7 +656,7 @@ lang_enrollment_oct26<-lang_enrollment_oct26%>%
 
 # Check the calculation worked: values match, looks good!
 
-lang_enrollment_oct26%>%
+lang_enrollment_oct26_opt1%>%
   filter(county=="Los Angeles")%>%
   mutate(korean_qa=(korean_2026_10-korean_2025_06)/korean_2025_06*100)%>%
   select(korean_qa, korean_pct_change)%>%
@@ -667,8 +666,92 @@ lang_enrollment_oct26%>%
 # Then compare the difference in percents across our 'before' and 'after' year.
 # This would account  for enrollment changes to Medi-Cal in general
 
+# create a sub df for just medi-cal totals by county to use as denominator 
+## JZ NOTE: If this passes QA, I also cpoied this code in line 84 because I realized for workflow purposes
+# We should just have a medical total df that can be joined to any subsequent medi-cal anlaysis instead of recalculating for every Medi-Cal analysis
+
+medical_tot<-medical_lang_raw%>%
+  group_by(county, month_of_eligibility)%>%
+  filter(month_of_eligibility %in% c(after, before)) %>%
+  summarise(total=sum(total_eligibles, na.rm=TRUE))%>%
+  pivot_wider(
+    id_cols = county,
+    names_from = c(month_of_eligibility),
+    values_from = total,
+    names_glue = "total_{month_of_eligibility}",
+    values_fill = 0)%>%
+  rename_with(~ gsub("-", "_", .x))%>%   # clean up column names
+filter(county!="STATEWIDE")
+
+# Join this to my language df
+
+lang_enrollment_oct26_opt2<-lang_enrollment_oct26%>%
+  left_join(medical_tot)
+
+# check what column names are
+colnames_opt2<-as.data.frame(colnames(lang_enrollment_oct26_opt2))
+
+# now calculate rate of enrollment by language spoken now that I have total medi-cal enrollment for my denominator
+
+test <- lang_enrollment_oct26_opt2 %>%
+  
+  # Calculate enrollment rates for each language
+  mutate(
+    across(
+      matches("_(2025_06|2026_10)$") & !starts_with("total_") & !contains("_rate_"),
+      ~ .x / get(paste0(
+        "total_",
+        str_extract(cur_column(), "2025_06|2026_10")
+      )) * 100,
+      .names = "{str_replace(.col, '_(2025_06|2026_10)$', paste0('_rate_', str_extract(.col, '2025_06|2026_10')))}"
+    )
+  ) 
 
 
+# see if that worked so far ----so far so good
+
+test%>%
+  filter(county=='Alameda')%>%
+  mutate(qa26=english_2026_10/total_2026_10*100,
+         qa25=spanish_2025_06/total_2025_06*100)%>%
+  select(qa26, english_rate_2026_10, qa25, spanish_rate_2025_06)%>%
+  View()
+  
+  # Now that the rates look good,  calculate percentage point differences
+test1<-test%>%
+  mutate(
+    across(
+      ends_with("_rate_2025_06"),
+      ~ get(str_replace(cur_column(), "_rate_2025_06$", "_rate_2026_10")) - .x,
+      .names = "{str_remove(.col, '_rate_2025_06$')}_june25_oct26_diff"
+    )
+  )
+
+# check that worked --- yes looks good
+
+test1%>%
+  filter(county=='Alameda')%>%
+  mutate(qa=english_rate_2026_10-english_rate_2025_06)%>%
+  select(qa, english_june25_oct26_diff)%>%
+  View()
+
+# assign back to option 2 df
+
+lang_enrollment_oct26_opt2<-test1
+
+# Now I want to compare option 1 and option 2 methodologies
+
+join<-lang_enrollment_oct26_opt1%>%
+  left_join(lang_enrollment_oct26_opt2)%>%
+  select(county,ends_with("change"), ends_with("diff"))%>%
+  select(county, all_of(sort(setdiff(names(.), "county"))))
+
+# Push this out to excel so we have it to look at later
+# write.xlsx(join, file = "W:/Project/ECI/HR 1 Tracker/Data Exploration/medical_enrollment_langspoken_june25_oct26.xlsx", overwrite = FALSE)
+
+# I do think it makes more sense to move forward with option 2 for more accuracy 
+
+lang_enrollment_oct26<-lang_enrollment_oct26_opt2
 
 # Now add in county geoids and clean up column names to match workflow
 
@@ -705,7 +788,7 @@ names(charvect) <- names(df)
 
 # set table info
 
-table_name <- "rel_medical_enrollment_lang_county_jan27"
+table_name <- "rel_medical_enrollment_lang_county_jan27_qa"
 schema <- "dashboard"
 indicator <- "Total enrollment in the Medi-Cal by language spoken in June 2025, October 2026, and the percent change in enrollment between June 2025 and October 2026.
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
