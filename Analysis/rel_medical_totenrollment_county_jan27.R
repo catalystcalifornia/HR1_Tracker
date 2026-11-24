@@ -245,7 +245,7 @@ ungroup()%>%
   pivot_wider(names_from=month_of_eligibility, values_from=c("count","total", "rate"))%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   group_by(county, aid_category)%>%
-  mutate(june25_oct26_diff=(rate_2026_10-rate_2025_06))
+  mutate(diff=(rate_2026_10-rate_2025_06))
 
 # Join Methodology 1 + Methodology 2 and make side by side comparisons
 
@@ -281,7 +281,6 @@ length(unique(aid_enrollment_oct26$county)) # good now 58 counties
 # Continue making this into a rel table: recode aid_category values using case_when for better formatted columns when we pivot wider
 
 aid_enrollment_oct26<- aid_enrollment_oct26 %>%
-  filter(!grepl("Suppressed Cell Total|STATEWIDE", county)) %>%
   mutate(
     aid_category_re = case_when(
       aid_category == "ACA Expansion Adult Age 19 to 64" ~ "aca_exp_adult",
@@ -317,7 +316,7 @@ aid_enrollment_oct26<-aid_enrollment_oct26%>%
     total_2026_10,
     rate_2025_06,
     rate_2026_10,
-    june25_oct26_diff
+    diff
   ),
   names_glue = "{aid_category_re}_{.value}"
 )
@@ -723,7 +722,7 @@ step2<-step1%>%
     across(
       ends_with("_rate_2025_06"),
       ~ get(str_replace(cur_column(), "_rate_2025_06$", "_rate_2026_10")) - .x,
-      .names = "{str_remove(.col, '_rate_2025_06$')}_june25_oct26_diff"
+      .names = "{str_remove(.col, '_rate_2025_06$')}_diff"
     )
   )
 
@@ -732,7 +731,7 @@ step2<-step1%>%
 step2%>%
   filter(county=='Alameda')%>%
   mutate(qa=english_rate_2026_10-english_rate_2025_06)%>%
-  select(qa, english_june25_oct26_diff)%>%
+  select(qa, english_diff)%>%
   View()
 
 # assign back to option 2 df
