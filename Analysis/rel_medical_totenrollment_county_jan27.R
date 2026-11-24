@@ -45,12 +45,6 @@ ca_counties <- counties(
   year = 2026,
   cb = FALSE
 )
-# Establish before/after times for percent change calcs---------------------------
-
-# Set your percent time change START and END times here: this way if we want to make changes we only have to reset it once here
-
-before<-"2025-06" # June 2025
-after<-"2026-10" # October 2026
 
 # Create a relational table for total medi-cal population-----------------------------
 
@@ -1320,7 +1314,7 @@ indicator <- "Enrollment rates in the Medi-Cal program by race in June 2025,
 October 2026, and the percentage point difference in enrollment rates between October 2026 and June 2025.
 Original data source: https://data.chhs.ca.gov/dataset/medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_rel_medical_enrollment.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
