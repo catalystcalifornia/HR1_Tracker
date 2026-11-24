@@ -9,6 +9,33 @@ output:
     toc_float: true
 ---
 
+```{r, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE,message = FALSE,echo=FALSE)
+
+library(RPostgres)
+library(highcharter)
+library(dplyr)
+library(tidyr)
+library(gt)
+
+
+
+source("W:\\RDA Team\\R\\credentials_source.R")
+con <- connect_to_db("eqb_hr1_tracker")
+
+# set global options to ensure that comma separator is a comma for highchart graphs
+
+lang <- getOption("highcharter.lang")
+lang$thousandsSep <- ","
+options(highcharter.lang = lang)
+
+# preset variables for visualizing
+
+before<-"June 2025"
+after<-"October 2026"
+
+```
 # Overview 
 
 ## Indicators
@@ -39,6 +66,87 @@ output:
 ### Medi-Cal Total Enrollment
 
 ```{r}
+
+# Step 1: Read in relational table
+
+df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_county_jan27")
+
+# Step 2: Create a visual 
+
+df %>% 
+   hchart(
+    type = "bar", 
+    hcaes(y = round(medical_enrollment_pct_change, 2), 
+          x = county_name),
+
+    color = "#2E8B57",
+    negativeColor = "#C0392B",
+
+    tooltip = list(
+      pointFormat = "Total Enrollment 2025: {point.medical_enrollment_2025_06:,.0f}<br>
+      Total Enrollment 2026: {point.medical_enrollment_2026_10:,.0f}"
+    )
+  ) %>% 
+  hc_tooltip(crosshairs = TRUE) %>% 
+  
+  hc_xAxis( title = list(text = ""),
+            labels=list(style=list(fontSize='15px'))) %>% 
+  
+  hc_yAxis( title = list(text = ""),
+            labels = list(format = "{value}%")) %>%  ##this is for rate indicators only adding % signs 
+  
+  # title elements
+  hc_title(
+    text = paste0("Medi-Cal Total Enrollment"),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='30px')
+  ) %>%
+    # subtitle elements
+  hc_subtitle(
+    text = paste0("Percent change in total enrollment from ",before," to ",after),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='15px')
+  ) 
+
+
+# Step 3: Summary statistics
+
+df %>%
+  select(where(is.numeric)) %>%
+  summarise(across(everything(),
+      list(
+        min = ~ min(.x, na.rm = TRUE),
+        q25 = ~ quantile(.x, 0.25, na.rm = TRUE),
+        median = ~ median(.x, na.rm = TRUE),
+        mean = ~ mean(.x, na.rm = TRUE),
+        q75 = ~ quantile(.x, 0.75, na.rm = TRUE),
+        max = ~ max(.x, na.rm = TRUE),
+        sd = ~ sd(.x, na.rm = TRUE),
+        missing = ~ sum(is.na(.x))
+      ),
+      .names = "{.col}__{.fn}")) %>%
+  pivot_longer(
+    everything(),
+    names_to = c("variable", ".value"),
+    names_sep = "__") %>%
+  gt() %>%
+  tab_header(
+    title = "Summary Statistics",
+    subtitle = "Distribution of indicators across counties") %>%
+  cols_label(
+    variable = "Indicator",
+    min = "Min",
+    q25 = "25th Pctl",
+    median = "Median",
+    mean = "Mean",
+    q75 = "75th Pctl",
+    max = "Max",
+    sd = "SD",
+    missing = "Missing") %>%
+  fmt_number(
+    columns = c(min, q25, median, mean, q75, max, sd),
+    decimals = 2) %>%
+  opt_row_striping()
 
 ```
 
