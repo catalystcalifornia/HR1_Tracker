@@ -37,7 +37,7 @@ food_inflation <- 0.027
 # Column names built from the time period variables
 before_col <- paste0("calfresh_dollars_per_enrollee_", before)
 after_col  <- paste0("calfresh_dollars_per_enrollee_", after)
-before_col_real   <- paste0(before_col, "_real")
+before_col_real   <- paste0("calfresh_dollars_per_enrollee_real_", before)
 
 # Data on dollars per enrollee in CalFresh and percent change from June 2025 to 2026
 dollars_per_enrollee <- calfresh_25_26 %>%
@@ -50,7 +50,8 @@ dollars_per_enrollee <- calfresh_25_26 %>%
   # The "real" 2025 dollars is adjusted for inflation 
   mutate(!!before_col_real := .data[[before_col]] * (1+food_inflation)) %>%
   # The "nominal" percent change does NOT account for inflation
-  mutate(calfresh_dollars_per_enrollee_pct_change_nominal = 
+  mutate(calfresh_dollars_per_enrollee_diff = .data[[after_col]] - .data[[before_col_real]],
+         calfresh_dollars_per_enrollee_pct_change_nominal = 
            (.data[[after_col]] / .data[[before_col]] - 1) * 100,
         # This is the "real" percent change
          calfresh_dollars_per_enrollee_pct_change = 
@@ -84,16 +85,19 @@ sd(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change)
 
 final_df <- dollars_per_enrollee_county %>%
   select(county_geoid:geolevel, 
-         all_of(c(before_col, before_col_real, after_col)),
-         calfresh_dollars_per_enrollee_pct_change)
+         all_of(c(before_col_real, after_col)),
+         calfresh_dollars_per_enrollee_diff,
+         calfresh_dollars_per_enrollee_pct_change) 
 
 ########### Push to Postgres ----
 # Write table with metadata
 table_name <- "rel_calfresh_dollars_per_enrollee_county_jan27"
 schema <- "dashboard"
-indicator <- "A table with the June 2025 and August 2026 percent change in CalFresh 
-dollars per enrollee by county, using the total number of CalFresh persons (not households). 
-Note that the percent change is adjusted for inflation, specifically using the 
+indicator <- "A table with the June 2025 and August 2026 percent change in
+CalFresh dollars per enrollee by county, using the total 
+number of CalFresh persons (not households). Also includes the difference
+in dollars per enrollee between August 2026 and June 2025.
+Note that June 2025 dollars per enrollee are adjusted for inflation, specifically using the 
 Consumer Price Index food at home index. For reference, the Consumer Price 
 Index food at home prices rose 2.7% from June 2025 to June 2026.
 
@@ -117,9 +121,9 @@ column_comments <- c(
   "Geoid of county", 
   "Name of county",
   "County level table",
-  "Dollars per enrollee during June 2025",
   "Dollars per enrollee during June 2025, using real dollars adjusted for inflation",
   "Dollars per enrollee during August 2026",
+  "Difference in dollars per enrollee between August 2026 and June 2025, adjusted for inflation",
   "Percent change of dollars per enrollee in CalFresh from June 2025 to August 2026, adjusted for inflation"
 )
 
