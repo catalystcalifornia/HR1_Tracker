@@ -49,8 +49,8 @@ dollars_per_enrollee <- calfresh_25_26 %>%
     names_glue = "calfresh_dollars_per_enrollee_{month_year}") %>%
   # The "real" 2025 dollars is adjusted for inflation 
   mutate(!!before_col_real := .data[[before_col]] * (1+food_inflation)) %>%
-  # The "nominal" percent change does NOT account for inflation
   mutate(calfresh_dollars_per_enrollee_diff = .data[[after_col]] - .data[[before_col_real]],
+        # The "nominal" percent change does NOT account for inflation
          calfresh_dollars_per_enrollee_pct_change_nominal = 
            (.data[[after_col]] / .data[[before_col]] - 1) * 100,
         # This is the "real" percent change
