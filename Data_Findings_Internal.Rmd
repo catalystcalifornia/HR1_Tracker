@@ -1,0 +1,88 @@
+---
+title: "HR 1 Tracker Indicator Data Findings"
+subtitle: "Internal Use Only"
+output:
+  html_document:
+    css: "W:\\RDA Team\\R\\cc_brandguide.css"
+    toc: true
+    toc_depth: 2
+    toc_float: true
+---
+
+# Overview 
+
+## Indicators
+
+| Release Date | Indicator | 
+| :--- | :--- |
+| January 28, 2027 | Medi-Cal Enrollment Total Enrollment |
+| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: Expansion Population |
+| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: By Race |
+| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: By Aid Category |
+| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: By Language Spoken |
+| January 28, 2027 | CalFresh Total Enrollment |
+| January 28, 2027 | CalFresh FSP Dollars/Issuances per Enrollee |
+| January 28, 2027 | CalFresh Applications Denied |
+| May 2027 | Medi-Cal Renewals* (Data availability dependent) |
+| May 2027 | Grocery Store Closures: # of grocery stores that closed in last year |
+| May 2027 | Grocery Store Closures: # of open grocery stores over 1 year |
+| May 2027 | Grocery Stores Revenue Losses: Grocery spending changes over 1 year |
+| May 2027 | Hospital and Clinic Closures: # of open hospitals and clinics over 1 year |
+| May 2027 | Hospital and Clinic Closures: # of closed hospitals and clinics over 1 year |
+| October 2027 | Healthcare Job Losses: # of licensed healthcare workers |
+| October 2027 | Preventable Hospitalizations: # of preventable hospitalizations  |
+
+# Data Findings
+
+## Medi-Cal Indicators
+
+### Medi-Cal Total Enrollment
+
+```{r}
+
+```
+
+### Medi-Cal Enrollment Total Enrollment: Expansion Population
+
+```{r}
+
+```
+
+### Medi-Cal Enrollment Total Enrollment: By Race
+
+```{r}
+
+```
+
+### Medi-Cal Enrollment Total Enrollment: By Aid Category
+
+```{r}
+
+```
+
+
+### Medi-Cal Enrollment Total Enrollment: By Language Spoken
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
