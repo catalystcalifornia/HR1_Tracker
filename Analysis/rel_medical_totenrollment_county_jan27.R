@@ -548,19 +548,19 @@ expected_2026 <- sub("2025_06$", "2026_10", cols_2025) # use 2025 column names b
 # find out what is missing between 2025 and 2026 
 setdiff(expected_2026, names(lang_enrollment_oct26)) # unknown_2026_10 is missing in actual 2026 data 2025. In 2026 it is:missing_unknown_2025_06
 
-lang_enrollment_oct26%>%
-  select(missing_unknown_2026_10) # has
-
-lang_enrollment_oct26%>%
-  select(unknown_2026_10) # does not have 
-
-lang_enrollment_oct26%>%
-  select(missing_unknown_2025_06) %>%
-  View() # has 
-
-lang_enrollment_oct26%>%
-  select(unknown_2025_06) %>%
-  View() # has both unknown AND missing/unknown for 2025
+# lang_enrollment_oct26%>%
+#   select(missing_unknown_2026_10) # has
+# 
+# lang_enrollment_oct26%>%
+#   select(unknown_2026_10) # does not have 
+# 
+# lang_enrollment_oct26%>%
+#   select(missing_unknown_2025_06) %>%
+#   View() # has 
+# 
+# lang_enrollment_oct26%>%
+#   select(unknown_2025_06) %>%
+#   View() # has both unknown AND missing/unknown for 2025
 
 sort(names(lang_enrollment_oct26)) 
 # hindi_2026_10
@@ -606,17 +606,17 @@ expected_2025 <- sub("2026_10$", "2025_06", cols_2026)
 
 setdiff(expected_2025, names(lang_enrollment_oct26)) # "hindi_2025_06"   "punjabi_2025_06" these are NOT in 2025
 
-lang_enrollment_oct26%>%
-  select(punjabi_2025_06) # none for 2025
-
-lang_enrollment_oct26%>%
-  select(punjabi_2026_10) # has in 2026
-
-lang_enrollment_oct26%>%
-  select(hindi_2025_06) # none
-
-lang_enrollment_oct26%>%
-  select(hindi_2026_10) # has in 2026
+# lang_enrollment_oct26%>%
+#   select(punjabi_2025_06) # none for 2025
+# 
+# lang_enrollment_oct26%>%
+#   select(punjabi_2026_10) # has in 2026
+# 
+# lang_enrollment_oct26%>%
+#   select(hindi_2025_06) # none
+# 
+# lang_enrollment_oct26%>%
+#   select(hindi_2026_10) # has in 2026
 
 # Unfortunately will not be able to calculate percent change for Hindi / Punjabi from 2025 to 2026, will have to exclude entirely for now
 
@@ -693,7 +693,7 @@ colnames_opt2<-as.data.frame(colnames(lang_enrollment_oct26_opt2))
 
 # now calculate rate of enrollment by language spoken now that I have total medi-cal enrollment for my denominator
 
-test <- lang_enrollment_oct26_opt2 %>%
+step1 <- lang_enrollment_oct26_opt2 %>%
   
   # Calculate enrollment rates for each language
   mutate(
@@ -710,15 +710,15 @@ test <- lang_enrollment_oct26_opt2 %>%
 
 # see if that worked so far ----so far so good
 
-test%>%
+step1%>%
   filter(county=='Alameda')%>%
   mutate(qa26=english_2026_10/total_2026_10*100,
          qa25=spanish_2025_06/total_2025_06*100)%>%
   select(qa26, english_rate_2026_10, qa25, spanish_rate_2025_06)%>%
   View()
   
-  # Now that the rates look good,  calculate percentage point differences
-test1<-test%>%
+# Now that the rates look good,  calculate percentage point differences
+step2<-step1%>%
   mutate(
     across(
       ends_with("_rate_2025_06"),
@@ -729,7 +729,7 @@ test1<-test%>%
 
 # check that worked --- yes looks good
 
-test1%>%
+step2%>%
   filter(county=='Alameda')%>%
   mutate(qa=english_rate_2026_10-english_rate_2025_06)%>%
   select(qa, english_june25_oct26_diff)%>%
@@ -737,7 +737,7 @@ test1%>%
 
 # assign back to option 2 df
 
-lang_enrollment_oct26_opt2<-test1
+lang_enrollment_oct26_opt2<-step2
 
 # Now I want to compare option 1 and option 2 methodologies
 
@@ -806,63 +806,115 @@ dbWriteTable( con,
 
 # add meta data programmatically because there are too many columns to manually type out
 
-# Get column names
-cols <- names(df)
+column_names <- colnames(df)
 
-# Generate column comments
-column_comments <- sapply(cols, function(col) {
+# Extract language from each column name
+language <- column_names %>%
+  str_remove("(_rate_2026_10|_rate_2025_06|_2026_10|_2025_06|_june25_oct26_diff)$") %>%
+  str_replace_all("_", " ")
+
+# Generate column comments based on column name patterns
+column_comments <- case_when(
   
-  # First 3 columns
-  if (col == "county_geoid") return("county geoid")
-  if (col == "county_name") return("county name")
-  if (col == "geolevel") return("geolevel")
+  str_detect(column_names, "_rate_2026_10$") ~
+    paste0("Rate of Medi-Cal enrollees whose spoken language is ",
+           language, " in October 2026 out of all Medi-Cal enrollees"),
   
-  # Extract language name by removing suffix
-  language <- col %>%
-    stringr::str_remove("_2026_10$|_2025_06$|_pct_change$") %>%
-    stringr::str_replace_all("_", " ")
+  str_detect(column_names, "_rate_2025_06$") ~
+    paste0("Rate of Medi-Cal enrollees whose spoken language is ",
+           language, " in June 2025 out of all Medi-Cal enrollees"),
   
-  # Generate description based on suffix
-  if (grepl("_2026_10$", col)) {
-    paste0(
-      "Total Medi-Cal enrollment for ", language,
-      " language by county for October 2026"
-    )
-    
-  } else if (grepl("_2025_06$", col)) {
-    paste0(
-      "Total Medi-Cal enrollment for ", language,
-      " language by county for June 2025"
-    )
-    
-  } else if (grepl("_pct_change$", col)) {
-    paste0(
-      "Percent change in Medi-Cal enrollment from June 2025 to October 2026 for ",
-      language, " language by county"
-    )
-    
-  } else {
-    NA_character_
-  }
-})
+  str_detect(column_names, "_2026_10$") ~
+    paste0("Count of Medi-Cal enrollees whose spoken language is ",
+           language, " in October 2026"),
+  
+  str_detect(column_names, "_2025_06$") ~
+    paste0("Count of Medi-Cal enrollees whose spoken language is ",
+           language, " in June 2025"),
+  
+  str_detect(column_names, "_june25_oct26_diff$") ~
+    paste0("Percentage point difference in the rate of Medi-Cal enrollees ",
+           "whose spoken language is ", language,
+           " between October 2026 and June 2025 (October 2026 minus June 2025)"),
+  
+  column_names == "county_geoid" ~ "County geographic identifier",
+  column_names == "county_name" ~ "County name",
+  column_names == "geolevel" ~ "Geographic level",
+  column_names == "county" ~ "County name",
+  
+  TRUE ~ NA_character_
+)
 
-# Remove names from vector
-column_comments <- unname(column_comments)
+# Assign column names to the vector
+names(column_comments) <- column_names
 
-
-# check this worked:
-
-# 93 - good
-length(column_comments)
-
-# View column names alongside generated comments: looks good!!!
+# check this worked --- looks good
 data.frame(
-  column_name = names(lang_enrollment_oct26),
+  column_name = column_names,
   column_comment = column_comments
 ) %>%
   View()
 
+
+# add comments 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
+
+# COMMENTING OUT OLD COMMENT CODE FOR NOW
+# # Get column names
+# cols <- names(df)
+# 
+# # Generate column comments
+# column_comments <- sapply(cols, function(col) {
+#   
+#   # First 3 columns
+#   if (col == "county_geoid") return("county geoid")
+#   if (col == "county_name") return("county name")
+#   if (col == "geolevel") return("geolevel")
+#   
+#   # Extract language name by removing suffix
+#   language <- col %>%
+#     stringr::str_remove("_2026_10$|_2025_06$|_pct_change$") %>%
+#     stringr::str_replace_all("_", " ")
+#   
+#   # Generate description based on suffix
+#   if (grepl("_2026_10$", col)) {
+#     paste0(
+#       "Total Medi-Cal enrollment for ", language,
+#       " language by county for October 2026"
+#     )
+#     
+#   } else if (grepl("_2025_06$", col)) {
+#     paste0(
+#       "Total Medi-Cal enrollment for ", language,
+#       " language by county for June 2025"
+#     )
+#     
+#   } else if (grepl("_pct_change$", col)) {
+#     paste0(
+#       "Percent change in Medi-Cal enrollment from June 2025 to October 2026 for ",
+#       language, " language by county"
+#     )
+#     
+#   } else {
+#     NA_character_
+#   }
+# })
+# 
+# # Remove names from vector
+# column_comments <- unname(column_comments)
+# 
+# 
+# # check this worked:
+# 
+# # 93 - good
+# length(column_comments)
+# 
+# # View column names alongside generated comments: looks good!!!
+# data.frame(
+#   column_name = names(lang_enrollment_oct26),
+#   column_comment = column_comments
+# ) %>%
+#   View()
 
 # Analysis: Medi-Cal Expansion population: Immigrant enrollment in Medi-Cal -------------------
 
@@ -987,10 +1039,27 @@ length(unique(expansion_youth_july26$county_name)) # 58 -- good
 # Calcs using June 2026 as end date
 
 qa <- medical_exp_19_50plus_raw %>%
-  filter(grepl("July 2026",reporting_period), age_group == "26_49")
+  filter(grepl("July 2026|June 2025",reporting_period)) # some rows have a different format for the reporting_period column
 
 expansion_adult_july26<- medical_exp_19_50plus_raw %>%
-  filter(reporting_period %in% c(after_exp, before)) %>%
+  filter(reporting_period %in% c(after_exp, before)) %>% 
+  rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset
+   group_by(month_of_eligibility, county) %>%
+  summarise(
+    total = sum(number_of_eligible_individuals, na.rm = TRUE), # aggregate all the 19+ age groups into one adult group
+    .groups = "drop"
+  ) %>%
+  complete(
+    county = unique(medical_exp_0_19_raw$county),
+    month_of_eligibility = c(before, after_exp)
+  )
+
+# apply qa fix:
+
+expansion_adult_july26_qa<- medical_exp_19_50plus_raw %>%
+  mutate(reporting_period=ifelse(reporting_period %in% "July 2026", after_exp,
+                                 ifelse(reporting_period %in% "June 2025", before, reporting_period)))%>% # fix the diff formatted reporting_period values
+  filter(reporting_period %in% c(after_exp, before)) %>% 
   rename("month_of_eligibility"="reporting_period")%>% # make this match other medi-cal dataset
   group_by(month_of_eligibility, county) %>%
   summarise(
@@ -1002,19 +1071,38 @@ expansion_adult_july26<- medical_exp_19_50plus_raw %>%
     month_of_eligibility = c(before, after_exp)
   )
 
+# Check QA fix worked: 
+expansion_adult_july26_qa%>%
+  filter(county %in% qa$county)%>%
+  View() # I will focus on Calaveras as my test county
+
+
+check<-medical_exp_19_50plus_raw%>%
+  filter(county=="Calaveras")%>%
+  filter(reporting_period %in% c(after_exp, before, "June 2025", "July 2026"))
+
+# Caleveras total in our before period should be 209 (19+118+72) which is what I see in expansion_adult_july26_qa 
+
+# Comparing expansion_adult_july26_qa values to expansion_adult_july26 I also see these counties increased in total eligibles
+# Looks good
+
+# Reassign expansion_adult_july26_qa as main analysis df
+
+expansion_adult_july26<-expansion_adult_july26_qa
+
 # how many NAs are there:
-sum(is.na(expansion_adult_july26$total)) # only 2
+sum(is.na(expansion_adult_july26_qa$total)) # 0!
 
 # quick check we aggregated all the age groups to get a combined total for age 19
 
 check<-medical_exp_19_50plus_raw%>%
   filter(county=='Alameda')%>%
-  filter(reporting_period %in% c(after_exp)) %>%
-  summarise(total=sum(number_of_eligible_individuals)) #17031 for July 2026
+  filter(reporting_period %in% c(after_exp, "July 2026")) %>%
+  summarise(total=sum(number_of_eligible_individuals)) #41920 for July 2026 including both date formats
 
 expansion_adult_july26%>%
   filter(county=="Alameda")%>%
-  View() #17031 for July 2026 -- good
+  View() #41920 for July 2026 -- good
 
 # continue with calcs and pivoting table wider
 
@@ -1040,7 +1128,7 @@ expansion_adult_july26<-expansion_adult_july26%>%
 length(unique(expansion_adult_july26$county_name)) # 58 good
 
 # check NAs
-sum(is.na(expansion_adult_july26$expansion_enrollment_pct_change)) # from 2 to 3? --looking at it I see its because Sierra and Trinity counties had 0 enrollment for both June 2025 and July 2026 -thats OK
+sum(is.na(expansion_adult_july26$expansion_enrollment_pct_change)) # 2 --looking at it I see its because Sierra and Alpine counties had 0 enrollment for both June 2025 and July 2026 -thats OK
 
 # Join tables together to calculate for TOTAL expansion population not disaggregated by age groups
 
@@ -1070,7 +1158,7 @@ class(expansion_total_july26)
 length(unique(expansion_total_july26$county_name)) # 58 good!
 
 # check NAs
-sum(is.na(expansion_total_july26$expansion_enrollment_pct_change)) # 3 good
+sum(is.na(expansion_total_july26$expansion_enrollment_pct_change)) # 2 good
 
 ###### Push Medi-cal expansion enrollment table to postgres ######
 
@@ -1091,7 +1179,7 @@ names(charvect) <- names(df)
 
 # set table info
 
-table_name <- "rel_medical_enrollment_expansion_county_jan27"
+table_name <- "rel_medical_enrollment_expansion_county_jan27_qa"
 schema <- "dashboard"
 indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, July 2026, and the percent change in enrollment between June 2025 and July 2026.
 Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
