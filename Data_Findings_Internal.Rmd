@@ -5,7 +5,7 @@ output:
   html_document:
     css: "W:\\RDA Team\\R\\cc_brandguide.css"
     toc: true
-    toc_depth: 2
+    toc_depth: 4
     toc_float: true
 ---
 
@@ -18,6 +18,7 @@ library(highcharter)
 library(dplyr)
 library(tidyr)
 library(gt)
+library(ggplot2)
 
 
 
@@ -36,36 +37,37 @@ before<-"June 2025"
 after<-"October 2026"
 
 ```
+
 # Overview 
+
+For the January 2027 release, the majority of our percent change/percentage point difference calculations use __June 2025__ as the baseline time to represent data before HR 1 implementation, and whatever the most recent available date is available in the data source. For the majority of the Medi-Cal analyses, data is calculated for __June 2025__ and __October 2026.__ The Medi-Cal expansion population analyses measures data from __June 2025__ to __July 2026.__ All of the CalFresh analyses measures data from __June 2025__ to __August 2026.__ 
 
 ## Indicators
 
-| Release Date | Indicator | 
-| :--- | :--- |
-| January 28, 2027 | Medi-Cal Enrollment Total Enrollment |
-| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: Expansion Population |
-| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: By Race |
-| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: By Aid Category |
-| January 28, 2027 | Medi-Cal Enrollment Total Enrollment: By Language Spoken |
-| January 28, 2027 | CalFresh Total Enrollment |
-| January 28, 2027 | CalFresh FSP Dollars/Issuances per Enrollee |
-| January 28, 2027 | CalFresh Applications Denied |
-| May 2027 | Medi-Cal Renewals* (Data availability dependent) |
-| May 2027 | Grocery Store Closures: # of grocery stores that closed in last year |
-| May 2027 | Grocery Store Closures: # of open grocery stores over 1 year |
-| May 2027 | Grocery Stores Revenue Losses: Grocery spending changes over 1 year |
-| May 2027 | Hospital and Clinic Closures: # of open hospitals and clinics over 1 year |
-| May 2027 | Hospital and Clinic Closures: # of closed hospitals and clinics over 1 year |
-| October 2027 | Healthcare Job Losses: # of licensed healthcare workers |
-| October 2027 | Preventable Hospitalizations: # of preventable hospitalizations  |
+| Release Date | Indicator | Time Breaks | 
+| :--- | :--- | :---
+| January 28, 2027 | Medi-Cal Enrollment Total Population | June 2025, October 2026 |
+| January 28, 2027 | Medi-Cal Enrollment: Expansion Population | June 2025, July 2026 |
+| January 28, 2027 | Medi-Cal Enrollment: By Race | June 2025, October 2026 |
+| January 28, 2027 | Medi-Cal Enrollment: By Aid Category | June 2025, October 2026 |
+| January 28, 2027 | Medi-Cal Enrollment: By Language Spoken | June 2025, October 2026 |
+| January 28, 2027 | CalFresh Total Enrollment | June 2025, August 2026 |
+| January 28, 2027 | CalFresh FSP Dollars/Issuances per Enrollee | June 2025, August 2026 |
+| January 28, 2027 | CalFresh Applications Denied | June 2025, August 2026 |
+| TBD | Medi-Cal Renewals* (Data availability dependent) | TBD |
+| May 2027 | Grocery Store Closures: # of grocery stores that closed in last year | TBD |
+| May 2027 | Grocery Store Closures: # of open grocery stores over 1 year | TBD |
+| May 2027 | Grocery Stores Revenue Losses: Grocery spending changes over 1 year | TBD |
+| May 2027 | Hospital and Clinic Closures: # of open hospitals and clinics over 1 year | TBD |
+| May 2027 | Hospital and Clinic Closures: # of closed hospitals and clinics over 1 year | TBD |
+| October 2027 | Healthcare Job Losses: # of licensed healthcare workers | TBD |
+| October 2027 | Preventable Hospitalizations: # of preventable hospitalizations  | TBD |
 
 # Data Findings
 
 ## Medi-Cal Indicators
 
-### Medi-Cal Total Enrollment
-
-* 
+### Medi-Cal Total Population
 
 ```{r}
 
@@ -73,12 +75,80 @@ after<-"October 2026"
 
 df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_county_jan27")
 
-# Step 2: Create a visual 
+# Step 2: Pre-define variable of interest you are visualizing / exploring for findings
+
+variable <- "medical_enrollment_pct_change"
+
+# Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
+
+top5 <- df %>%
+  slice_max(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+bottom5 <- df %>%
+  slice_min(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+# Step 4: Calculate summary stats for measurement of interest: percent change in enrollment
+
+stats <- df %>%
+  summarise(
+    min = min(.data[[variable]], na.rm = TRUE),
+    q1 = quantile(.data[[variable]], 0.25, na.rm = TRUE),
+    median = median(.data[[variable]], na.rm = TRUE),
+    mean = mean(.data[[variable]], na.rm = TRUE),
+    q3 = quantile(.data[[variable]], 0.75, na.rm = TRUE),
+    max = max(.data[[variable]], na.rm = TRUE))
+
+# format stats nicely for inline findings text 
+
+stats_fmt <- stats %>%
+  mutate(
+    across(
+      c(min, q1, median, mean, q3, max),
+      ~ sprintf("%.2f%%", .x)
+    )
+  )
+
+
+
+```
+
+* Every California county experienced a decline in Medi-Cal enrollment, with even the smallest percent change in enrollment (Placer county) losing 3.51% of its enrollment.
+* The typical California county lost nearly one in ten Medi-Cal enrollees on a net basis. The median county experienced a 9.02% decline in enrollment.
+* Approximately one in four counties experienced enrollment declines of 11.4% or more.
+* Approximately three in four counties experienced enrollment declines of 7.6% or more.
+
+
+* The 5 counties with the __lowest percent change__ in enrollment were: `r top5`.
+* The 5 counties with the __highest percent change__ in enrollment were: `r bottom5`.
+
+*Summary statistics*
+
+* Across California counties, the average percent change in enrollment was `r stats_fmt$mean`, and the median percent change was `r stats_fmt$median`.
+* County-level enrollment changes ranged from `r stats_fmt$min` to `r stats_fmt$max`.
+* The middle 50% of counties experienced enrollment changes between `r stats_fmt$q1` and `r stats_fmt$q3`.
+* Approximately 25% of counties experienced enrollment changes of `r stats_fmt$q1` or lower.
+* Approximately 75% of counties experienced enrollment changes of `r stats_fmt$q3` or lower.
+
+```{r}
+
+# Graph (I used conditional coloring for green == positive values, red == negative values) 
 
 df %>% 
    hchart(
     type = "bar", 
-    hcaes(y = round(medical_enrollment_pct_change, 2), 
+    hcaes(y = round(.data[[variable]], 2), 
           x = county_name),
 
     color = "#2E8B57",
@@ -110,53 +180,270 @@ df %>%
     style = list(useHTML = TRUE, fontWeight = "bold", fontSize='15px')
   ) 
 
+```
 
-# Step 3: Summary statistics
+```{r, include=FALSE}
 
-df %>%
-  select(where(is.numeric)) %>%
-  summarise(across(everything(),
-      list(
-        min = ~ min(.x, na.rm = TRUE),
-        q25 = ~ quantile(.x, 0.25, na.rm = TRUE),
-        median = ~ median(.x, na.rm = TRUE),
-        mean = ~ mean(.x, na.rm = TRUE),
-        q75 = ~ quantile(.x, 0.75, na.rm = TRUE),
-        max = ~ max(.x, na.rm = TRUE),
-        sd = ~ sd(.x, na.rm = TRUE),
-        missing = ~ sum(is.na(.x))
+# NOT SURE HOW HELPFUL BOX PLOTS ARE OUTSIDE DR GOING TO EXCLUDE FOR NOW BUT DO NOT WANT TO DELETE CODE # 
+# Visualize summary stats as a box plot
+
+ggplot(df, aes(x = .data[[variable]], y = "")) +
+
+  # Boxplot with whiskers extending to minimum and maximum
+  geom_boxplot(
+    fill = "#DCA398",
+    color = "#A45348",
+    width = 0.3,
+    coef = Inf
+  ) +
+
+  # Add mean as a point
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    color = "#74362D",
+    size = 3
+  ) +
+
+  # Label minimum, quartiles, and maximum
+  geom_text(
+    data = stats %>%
+      pivot_longer(
+        cols = c(min, q1, q3, max),
+        names_to = "statistic",
+        values_to = "value"
       ),
-      .names = "{.col}__{.fn}")) %>%
-  pivot_longer(
-    everything(),
-    names_to = c("variable", ".value"),
-    names_sep = "__") %>%
-  gt() %>%
-  tab_header(
-    title = "Summary Statistics",
-    subtitle = "Distribution of indicators across counties") %>%
-  cols_label(
-    variable = "Indicator",
-    min = "Min",
-    q25 = "25th Pctl",
-    median = "Median",
-    mean = "Mean",
-    q75 = "75th Pctl",
-    max = "Max",
-    sd = "SD",
-    missing = "Missing") %>%
-  fmt_number(
-    columns = c(min, q25, median, mean, q75, max, sd),
-    decimals = 2) %>%
-  opt_row_striping()
+    aes(x = value, y = "", label = paste0(round(value, 2), "%")),
+    inherit.aes = FALSE,
+    nudge_y = -0.25,
+    size = 3.5
+  ) +
+
+  # Label median
+  geom_text(
+    data = stats,
+    aes(
+      x = median, y = "",
+      label = paste0("Median: ", round(median, 2), "%")
+    ),
+    inherit.aes = FALSE,
+    nudge_y = 0.35,
+    fontface = "bold",
+    size = 4
+  ) +
+
+  # Reference line at zero
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    color = "gray50"
+  ) +
+
+  scale_x_continuous(
+    breaks = seq(-20, 0, 5),
+    labels = scales::label_number(suffix = "%"),
+    limits = c(-20, 1)
+  ) +
+
+  labs(
+    title = "Distribution of Medi-Cal Enrollment Changes",
+    subtitle = "California counties, June 2025 to October 2026",
+    x = "Percent change in Medi-Cal enrollment",
+    y = NULL,
+    caption = "Dot represents the mean. Middle red line represents median. Whiskers represent the minimum and maximum."
+  ) +
+
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(color = "gray50")
+  )
 
 ```
 
-### Medi-Cal Enrollment Total Enrollment: Expansion Population
+
+### Medi-Cal Enrollment: Expansion Population
+
+* Every single county, with the exception of Madera and San Luis Obispo, saw a negative percent change in enrollment of the Medi-Cal expansion population. 
+* The 5 counties with the __lowest percent change__ in enrollment were: `r top5`.
+* The 5 counties with the __highest percent change__ in enrollment were: `r bottom5`.
+
+*Summary statistics*
+
+* Across California counties, the average percent change in Medi-cal expansion population enrollment was `r stats_fmt$mean`, and the median percent change was `r stats_fmt$median`.
+* County-level enrollment changes ranged from `r stats_fmt$min` to `r stats_fmt$max`.
+* The middle 50% of counties experienced enrollment changes between `r stats_fmt$q1` and `r stats_fmt$q3`.
+* Approximately 25% of counties experienced enrollment changes of `r stats_fmt$q1` or lower.
+* Approximately 75% of counties experienced enrollment changes of `r stats_fmt$q3` or lower.
 
 ```{r}
 
+# Step 1: Read in relational table
+
+df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_expansion_county_jan27")
+
+# Step 2: Define variable of interest
+
+variable<-"expansion_total_pct_change"
+
+# Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
+
+top5 <- df %>%
+  slice_max(expansion_total_pct_change, n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+bottom5 <- df %>%
+  slice_min(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+# Step 4: Calculate summary statistics
+
+# Calculate summary stats for measurement of interest: percent change in enrollment
+
+stats <- df %>%
+  summarise(
+    min = min(.data[[variable]], na.rm = TRUE),
+    q1 = quantile(.data[[variable]], 0.25, na.rm = TRUE),
+    median = median(.data[[variable]], na.rm = TRUE),
+    mean = mean(.data[[variable]], na.rm = TRUE),
+    q3 = quantile(.data[[variable]], 0.75, na.rm = TRUE),
+    max = max(.data[[variable]], na.rm = TRUE))
+
+# format stats nicely for inline findings text 
+
+stats_fmt <- stats %>%
+  mutate(
+    across(
+      c(min, q1, median, mean, q3, max),
+      ~ sprintf("%.2f%%", .x)
+    )
+  )
+
+
 ```
+
+
+```{r}
+# Graph (I used conditional coloring for green == positive values, red == negative values) 
+
+df %>% 
+   hchart(
+    type = "bar", 
+    hcaes(y = round(.data[[variable]], 2), 
+          x = county_name),
+
+    color = "#2E8B57",
+    negativeColor = "#C0392B",
+
+    tooltip = list(
+      pointFormat = "Total Expansion Enrollment 2025: {point.expansion_total_2025_06:,.0f}<br>
+      Total Expansion Enrollment 2026: {point.expansion_total_enrollment_2026_10:,.0f}")) %>% 
+  hc_tooltip(crosshairs = TRUE) %>% 
+  
+  hc_xAxis( title = list(text = ""),
+            labels=list(style=list(fontSize='15px'))) %>% 
+  
+  hc_yAxis( title = list(text = ""),
+            labels = list(format = "{value}%")) %>%  ##this is for rate indicators only adding % signs 
+  
+  # title elements
+  hc_title(
+    text = paste0("Medi-Cal Total Enrollment of Expansion Population"),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='30px')
+  ) %>%
+    # subtitle elements
+  hc_subtitle(
+    text = paste0("Percent change in total enrollment from ",before," to ",after),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='15px')
+  ) 
+
+
+
+```
+
+
+```{r, include=FALSE}
+
+# NOT SURE HOW HELPFUL BOX PLOTS ARE OUTSIDE OF DR. GOING TO EXCLUDE FOR NOW AND SEE WHAT AV THINKS 
+
+# Visualize summary statistics as a box plot
+
+ggplot(df, aes(x = .data[[variable]], y = "")) +
+  # Boxplot with whiskers extending to minimum and maximum
+  geom_boxplot(
+    fill = "#DCA398",
+    color = "#A45348",
+    width = 0.3,
+    coef = Inf) +
+
+  # Add mean as a point
+  stat_summary(
+    fun = mean,
+    geom = "point",
+    color = "#74362D",
+    size = 3) +
+  # Label minimum, quartiles, and maximum
+  geom_text(
+    data = stats %>%
+      pivot_longer(
+        cols = c(min, q1, q3, max),
+        names_to = "statistic",
+        values_to = "value"), aes(x = value, y = "", label = paste0(round(value, 2), "%")),
+    inherit.aes = FALSE,
+    nudge_y = -0.25,
+    size = 3.5 ) +
+  # Label median
+  geom_text( data = stats,aes( x = median, y = "",label = paste0("Median: ", round(median, 2), "%")),
+    inherit.aes = FALSE,
+    nudge_y = 0.35,
+    fontface = "bold",
+    size = 4 ) +
+  # Reference line at zero
+  geom_vline(
+    xintercept = 0,
+    linetype = "dashed",
+    color = "gray50") +
+  scale_x_continuous(
+    breaks = seq(-20, 0, 5),
+    labels = scales::label_number(suffix = "%"),
+    limits = c(-20, 1)) +
+  labs(
+    title = "Distribution of Medi-Cal Expansion Enrollment Changes",
+    subtitle = paste0("California counties ",before," to ", after),
+    x = "Percent change in Medi-Cal expansion enrollment",
+    y = NULL,
+    caption = "Dot represents the mean. Middle red line represents median. Whiskers represent the minimum and maximum.") +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.y = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(color = "gray50"))
+
+
+```
+
+
+
+
+
+#### Medi-Cal Enrollment: Expansion Population age 0-19
 
 ### Medi-Cal Enrollment Total Enrollment: By Race
 
@@ -164,7 +451,7 @@ df %>%
 
 ```
 
-### Medi-Cal Enrollment Total Enrollment: By Aid Category
+### Medi-Cal Enrollment: By Aid Category
 
 ```{r}
 
