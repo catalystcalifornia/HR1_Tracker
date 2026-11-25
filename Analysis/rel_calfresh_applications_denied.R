@@ -224,7 +224,7 @@ table_name <- "rel_calfresh_applications_received_county_jan27"
 indicator <- "A table with the June 2025 and August 2026 number of CalFresh applications received 
 by county and the percent change in the numbers of applications received. Statewide, 
 the percent change is 5.97 and across counties, the standard 
-deviation is 32.88.
+deviation is 33.18.
 
 Summary statistics for the percent change across counties are
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NAs 
