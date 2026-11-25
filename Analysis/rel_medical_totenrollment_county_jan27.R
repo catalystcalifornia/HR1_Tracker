@@ -323,7 +323,7 @@ aid_enrollment_oct26<-aid_enrollment_oct26%>%
 aid_enrollment_oct26%>%
   filter(county=="San Diego")%>%
   mutate(chip_qa=(chip_rate_2026_10-chip_rate_2025_06))%>%
-  select(chip_qa, chip_june25_oct26_diff)%>%
+  select(chip_qa, chip_diff)%>%
   View()
 
 # Now add in county geoids and clean up column names to match workflow
