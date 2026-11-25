@@ -1216,11 +1216,11 @@ add_table_comments(con, schema, table_name, indicator, source, qa_filepath, colu
 # Analysis: Medi-Cal enrollment by race category ----------------------
 
 # Create separate relational table for medi-cal monthly enrollment and
-# percentage point difference between June 2025 and June 2026 by race
+# percentage point difference between June 2025 and October 2026 by race
 before_col<-gsub("-", "_", before) # June 2025
 after_col<-gsub("-", "_", after) # October 2026
 
-race_enrollment_june25<- medical_race_raw %>%
+race_enrollment_oct26<- medical_race_raw %>%
   filter(month_of_eligibility %in% c(after, before)) %>%
   group_by(month_of_eligibility, county, ethnicity) %>%
   summarise(
@@ -1266,7 +1266,7 @@ race_enrollment_june25<- medical_race_raw %>%
 
 # Check the calculation worked: values match, looks good!
 
-check<-race_enrollment_june25%>%
+check<-race_enrollment_oct26%>%
   filter(county=="San Diego")%>%
   mutate(latinx_qa= latinx_rate_2026_10-latinx_rate_2025_06)%>%
   select(latinx_qa, latinx_rate_diff)
@@ -1276,7 +1276,7 @@ rm(check)
 
 # left join county_geoid values and clean up columns to match naming conventions
 
-race_enrollment_june25<-race_enrollment_june25%>%
+race_enrollment_oct26<-race_enrollment_oct26%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
@@ -1286,7 +1286,7 @@ race_enrollment_june25<-race_enrollment_june25%>%
   ungroup()
 
 # check resulting table is a  df -- good
-class(race_enrollment_june25)
+class(race_enrollment_oct26)
 
 
 ###### Push Medi-cal race enrollment table to postgres ######
