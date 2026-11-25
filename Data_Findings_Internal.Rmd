@@ -78,6 +78,7 @@ df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_county_jan27
 # Step 2: Pre-define variable of interest you are visualizing / exploring for findings
 
 variable <- "medical_enrollment_pct_change"
+variable_label<-"Medi-cal total enrollment percent change" # spelled out for text
 
 # Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
 
@@ -128,8 +129,6 @@ stats_fmt <- stats %>%
 * The typical California county lost nearly one in ten Medi-Cal enrollees on a net basis. The median county experienced a 9.02% decline in enrollment.
 * Approximately one in four counties experienced enrollment declines of 11.4% or more.
 * Approximately three in four counties experienced enrollment declines of 7.6% or more.
-
-
 * The 5 counties with the __lowest percent change__ in enrollment were: `r top5`.
 * The 5 counties with the __highest percent change__ in enrollment were: `r bottom5`.
 
@@ -292,7 +291,7 @@ variable<-"expansion_total_pct_change"
 # Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
 
 top5 <- df %>%
-  slice_max(expansion_total_pct_change, n = 5, with_ties = FALSE) %>%
+  slice_max(.data[[variable]], n = 5, with_ties = FALSE) %>%
   mutate(label = paste0(
     county_name, " (",
     round(.data[[variable]], 2), "%)"
@@ -335,7 +334,6 @@ stats_fmt <- stats %>%
 
 ```
 
-
 ```{r}
 # Graph (I used conditional coloring for green == positive values, red == negative values) 
 
@@ -375,7 +373,6 @@ df %>%
 
 
 ```
-
 
 ```{r, include=FALSE}
 
@@ -440,10 +437,128 @@ ggplot(df, aes(x = .data[[variable]], y = "")) +
 ```
 
 
+### Medi-Cal Enrollment: Expansion Population Age 0-19
+
+* The 5 counties with the __lowest percent change__ in enrollment were: `r top5`.
+* The 5 counties with the __highest percent change__ in enrollment were: `r bottom5`.
+* A large number of counties didn't have any enrollment of the expansion population from age 0-19 within any of our time periods of interest (see printed below)
+
+*Summary statistics*
+
+* Across California counties, the average percent change in Medi-cal expansion population enrollment for ages 0-19 was `r stats_fmt$mean`, and the median percent change was `r stats_fmt$median`.
+* County-level enrollment changes ranged from `r stats_fmt$min` to `r stats_fmt$max`.
+* The middle 50% of counties experienced enrollment changes between `r stats_fmt$q1` and `r stats_fmt$q3`.
+* Approximately 25% of counties experienced enrollment changes of `r stats_fmt$q1` or lower.
+* Approximately 75% of counties experienced enrollment changes of `r stats_fmt$q3` or lower.
+
+```{r}
+
+# Step 1: Read in relational table
+
+df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_expansion_county_jan27")%>%
+  select(1:3, starts_with("expansion_youth")) # only pull youth expansion columns
+
+# Step 2: Define variable of interest
+
+variable<-"expansion_youth_pct_change"
+
+# Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
+
+top5 <- df %>%
+  slice_max(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+bottom5 <- df %>%
+  slice_min(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+# Step 4: Calculate summary statistics
+
+# Calculate summary stats for measurement of interest: percent change in enrollment
+
+stats <- df %>%
+  summarise(
+    min = min(.data[[variable]], na.rm = TRUE),
+    q1 = quantile(.data[[variable]], 0.25, na.rm = TRUE),
+    median = median(.data[[variable]], na.rm = TRUE),
+    mean = mean(.data[[variable]], na.rm = TRUE),
+    q3 = quantile(.data[[variable]], 0.75, na.rm = TRUE),
+    max = max(.data[[variable]], na.rm = TRUE))
+
+# format stats nicely for inline findings text 
+
+stats_fmt <- stats %>%
+  mutate(
+    across(
+      c(min, q1, median, mean, q3, max),
+      ~ sprintf("%.2f%%", .x)
+    )
+  )
+
+# I want to see how many counties have NA 
+
+missing_youth <- df %>%
+  filter(if_any(
+      c(expansion_youth_2025_06, expansion_youth_2026_07),  ~ is.na(.x) | .x == 0)) %>%
+  select(county_name, expansion_youth_2025_06,expansion_youth_2026_07
+  ) %>%
+  arrange(county_name)
+
+
+print(missing_youth)
+```
+
+
+```{r}
+# Graph (I used conditional coloring for green == positive values, red == negative values) 
+
+df %>% 
+   hchart(
+    type = "bar", 
+    hcaes(y = round(.data[[variable]], 2), 
+          x = county_name),
+
+    color = "#2E8B57",
+    negativeColor = "#C0392B",
+
+    tooltip = list(
+      pointFormat = "Total Expansion Enrollment 2025: {point.expansion_total_2025_06:,.0f}<br>
+      Total Expansion Enrollment 2026: {point.expansion_total_enrollment_2026_10:,.0f}")) %>% 
+  hc_tooltip(crosshairs = TRUE) %>% 
+  
+  hc_xAxis( title = list(text = ""),
+            labels=list(style=list(fontSize='15px'))) %>% 
+  
+  hc_yAxis( title = list(text = ""),
+            labels = list(format = "{value}%")) %>%  ##this is for rate indicators only adding % signs 
+  
+  # title elements
+  hc_title(
+    text = paste0("Medi-Cal Total Enrollment of Expansion Population"),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='30px')
+  ) %>%
+    # subtitle elements
+  hc_subtitle(
+    text = paste0("Percent change in total enrollment from ",before," to ",after),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='15px')
+  ) 
 
 
 
-#### Medi-Cal Enrollment: Expansion Population age 0-19
+```
+
 
 ### Medi-Cal Enrollment Total Enrollment: By Race
 
