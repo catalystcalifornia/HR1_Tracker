@@ -169,7 +169,7 @@ schema <- "dashboard"
 indicator <- "Total monthly enrollment of Medi-Cal eligibles (total Medi-Cal universe) expansion program in June 2025, October 2026, and the percent change in enrollment between June 2025 and October 2026.
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_rel_medical_enrollment.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
@@ -362,14 +362,14 @@ names(charvect) <- names(df)
 
 # set table info
 
-table_name <- "rel_medical_enrollment_aid_county_jan27_qa"
+table_name <- "rel_medical_enrollment_aid_county_jan27"
 schema <- "dashboard"
 indicator <- "Total and rate of enrollment in Medi-Cal by aid programs in June 2025, October 2026, and the difference in those enrollment rates
 between June 2025 and October 2026. For instance, aid program enrollment rates are calculated by taking (aid enrollment / total enrollment in Medi-Cal) for June 2025 and October 2026.
 The rate diff calcs are then made by subtracting the rates from each other: (aid enrollment rate Oct 2026)-(aid enrollment rate in June 2025)
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_rel_medical_enrollment.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
@@ -426,8 +426,8 @@ column_comments <- case_when(
   ),
   
   # Percentage point differences between June 2025 and October 2026
-  str_detect(column_names, "_june25_oct26_diff$") ~ paste0(
-    str_remove(column_names, "_june25_oct26_diff$") %>%
+  str_detect(column_names, "_diff$") ~ paste0(
+    str_remove(column_names, "_diff$") %>%
       str_replace_all("_", " "),
     " percentage point change in share of total Medi-Cal enrollment from June 2025 to October 2026"
   ),
@@ -450,39 +450,6 @@ data.frame(
 
 # Check whether any columns were missed
 column_comments[column_comments == "Column description not defined"]
-
-# column_names <- colnames(df) # Get column names
-# 
-# column_comments <- column_comments <- c(
-#   'county geoid',
-#   'county name',
-#   'geolevel',
-#   'Total medi-cal enrollment in aca expansion adult aid category by county for October 2026',
-#   'Total medi-cal enrollment in the adopted/foster aid category by county for October 2026',
-#   'Total medi-cal enrollment in the CHIP aid category by county for October 2026',
-#   'Total medi-cal enrollment in the LTC aid category by county for October 2026',
-#   'Total medi-cal enrollment in the OTHER aid category by county for October 2026',
-#   'Total medi-cal enrollment in the parent or caretaker with child aid category by county for October 2026',
-#   'Total medi-cal enrollment in the senior disabled aid category by county for October 2026',
-#   
-#   'Total medi-cal enrollment in aca expansion adult aid category by county for June 2025',
-#   'Total medi-cal enrollment in the adopted/foster aid category by county for June 2025',
-#   'Total medi-cal enrollment in the CHIP aid category by county for June 2025',
-#   'Total medi-cal enrollment in the LTC aid category by county for June 2025',
-#   'Total medi-cal enrollment in the OTHER aid category by county for June 2025',
-#   'Total medi-cal enrollment in the parent or caretaker with child aid category by county for June 2025',
-#   'Total medi-cal enrollment in the senior disabled aid category by county for June 2025',
-#   
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the aca expansion adult aid category by county',
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the adopted/foster aid category by county for June 2025',
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the CHIP aid category by county',
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the LTC aid category by county',
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026t in the OTHER aid category by county',
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the parent or caretaker with child aid category by county5',
-#   'Percent change in medi-cal enrollment from June 2025 to october 2026 in the senior disabled aid category by county'
-#   
-# 
-# )
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
@@ -784,12 +751,12 @@ names(charvect) <- names(df)
 
 # set table info
 
-table_name <- "rel_medical_enrollment_lang_county_jan27_qa"
+table_name <- "rel_medical_enrollment_lang_county_jan27"
 schema <- "dashboard"
-indicator <- "Total enrollment in the Medi-Cal by language spoken in June 2025, October 2026, and the percent change in enrollment between June 2025 and October 2026.
+indicator <- "Total enrollment in the Medi-Cal by language spoken in June 2025, October 2026, and the percentage point difference in enrollment between June 2025 and October 2026.
  Original data source: https:\\data.chhs.ca.gov\\dataset\\medi-cal-certified-eligibles-with-demographics-by-month"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_rel_medical_enrollment.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
@@ -806,7 +773,7 @@ column_names <- colnames(df)
 
 # Extract language from each column name
 language <- column_names %>%
-  str_remove("(_rate_2026_10|_rate_2025_06|_2026_10|_2025_06|_june25_oct26_diff)$") %>%
+  str_remove("(_rate_2026_10|_rate_2025_06|_2026_10|_2025_06|_diff)$") %>%
   str_replace_all("_", " ")
 
 # Generate column comments based on column name patterns
@@ -828,7 +795,7 @@ column_comments <- case_when(
     paste0("Count of Medi-Cal enrollees whose spoken language is ",
            language, " in June 2025"),
   
-  str_detect(column_names, "_june25_oct26_diff$") ~
+  str_detect(column_names, "_diff$") ~
     paste0("Percentage point difference in the rate of Medi-Cal enrollees ",
            "whose spoken language is ", language,
            " between October 2026 and June 2025 (October 2026 minus June 2025)"),
@@ -854,63 +821,6 @@ data.frame(
 
 # add comments 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
-
-# COMMENTING OUT OLD COMMENT CODE FOR NOW
-# # Get column names
-# cols <- names(df)
-# 
-# # Generate column comments
-# column_comments <- sapply(cols, function(col) {
-#   
-#   # First 3 columns
-#   if (col == "county_geoid") return("county geoid")
-#   if (col == "county_name") return("county name")
-#   if (col == "geolevel") return("geolevel")
-#   
-#   # Extract language name by removing suffix
-#   language <- col %>%
-#     stringr::str_remove("_2026_10$|_2025_06$|_pct_change$") %>%
-#     stringr::str_replace_all("_", " ")
-#   
-#   # Generate description based on suffix
-#   if (grepl("_2026_10$", col)) {
-#     paste0(
-#       "Total Medi-Cal enrollment for ", language,
-#       " language by county for October 2026"
-#     )
-#     
-#   } else if (grepl("_2025_06$", col)) {
-#     paste0(
-#       "Total Medi-Cal enrollment for ", language,
-#       " language by county for June 2025"
-#     )
-#     
-#   } else if (grepl("_pct_change$", col)) {
-#     paste0(
-#       "Percent change in Medi-Cal enrollment from June 2025 to October 2026 for ",
-#       language, " language by county"
-#     )
-#     
-#   } else {
-#     NA_character_
-#   }
-# })
-# 
-# # Remove names from vector
-# column_comments <- unname(column_comments)
-# 
-# 
-# # check this worked:
-# 
-# # 93 - good
-# length(column_comments)
-# 
-# # View column names alongside generated comments: looks good!!!
-# data.frame(
-#   column_name = names(lang_enrollment_oct26),
-#   column_comment = column_comments
-# ) %>%
-#   View()
 
 # Analysis: Medi-Cal Expansion population: Immigrant enrollment in Medi-Cal -------------------
 
@@ -1107,7 +1017,7 @@ expansion_adult_july26<-expansion_adult_july26%>%
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
   rename_with(~ paste0("expansion_adult_", .x), .cols = 2:3) %>%
   group_by(county)%>%
-  mutate(expansion_enrollment_pct_change=(expansion_adult_2026_07-expansion_adult_2025_06)/expansion_adult_2025_06*100)%>%
+  mutate(expansion_adult_pct_change=(expansion_adult_2026_07-expansion_adult_2025_06)/expansion_adult_2025_06*100)%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
@@ -1175,13 +1085,13 @@ names(charvect) <- names(df)
 
 # set table info
 
-table_name <- "rel_medical_enrollment_expansion_county_jan27_qa"
+table_name <- "rel_medical_enrollment_expansion_county_jan27"
 schema <- "dashboard"
 indicator <- "Total enrollment in the Medi-Cal expansion program in June 2025, July 2026, and the percent change in enrollment between June 2025 and July 2026.
 Data is cut by ages 0-19, age 19-plus, and for the entire medi-cal expansion population which aggregates the enrollment totals
 for age 0-10 and age 19+ Original data source: https:\\data.chhs.ca.gov/dataset/medi-cal-adult-expansion"
 source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
-qa_filepath <- "W:\\Project\\ECI\\HEI\\Documentation\\QA_rel_medical_enrollment.docx"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_rel_medical_enrollment.docx"
 table_comment <- paste0(indicator, source)
 
 # push to postgres
