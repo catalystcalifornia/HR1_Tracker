@@ -15,7 +15,7 @@ library(readr)
 library(ggplot2)
 library(openxlsx)
 library(mapview)
-
+options(scipen = 999)
 # Connect to postgres
 
 source("W:\\RDA Team\\R\\credentials_source.R")
@@ -34,19 +34,17 @@ medical_lang_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_elig
 medical_exp_0_19_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_expansion_age0_19_2016_26")
 medical_exp_19_50plus_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_expansion_age19_50plus_2020_26")
 
-# Read in california counties using tigris so I can join to my relational table: 
+# Establish before/after times for percent change calcs---------------------------
+# Set your percent time change START and END times here: this way if we want to make changes we only have to reset it once here
+before<-"2025-06" # June 2025
+after<-"2026-10" # October 2026
 
+# Read in california counties using tigris so I can join to my relational table: 
 ca_counties <- counties(
   state = "CA",
   year = 2026,
   cb = FALSE
 )
-# Establish before/after times for percent change calcs---------------------------
-
-# Set your percent time change START and END times here: this way if we want to make changes we only have to reset it once here
-
-before<-"2025-06" # June 2025
-after<-"2026-10" # October 2026
 
 # Create a relational table for total medi-cal population-----------------------------
 
@@ -71,17 +69,18 @@ medical_tot<-medical_lang_raw%>%
 # I want to understand if the sub categories within each of these tables adds to a 'total' universe of people enrolled in MediCal
 
 # To do this lets take a single county / time period and add the subcategories fore two tables and see if the totals are the same
-total_race_lac<-medical_race_raw%>%
-  filter(county=="Los Angeles" & month_of_eligibility=="2026-10")%>%
-  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 3622919
 
-total_aid_lac<-medical_aid_raw%>%
-  filter(county=="Los Angeles" & month_of_eligibility=="2026-10")%>%
-  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 3622919 --  the same
+total_race_lac <- medical_race_raw%>%
+  filter(county=="Los Angeles" & month_of_eligibility %in% c(before, after))%>%
+  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 7752765
 
-total_lang_lac<-medical_lang_raw%>%
-  filter(county=="Los Angeles" & month_of_eligibility=="2026-10")%>%
-  summarise(total=sum(total_eligibles, na.rm=TRUE)) # 3622919 --  the same
+total_aid_lac <- medical_aid_raw%>%
+  filter(county=="Los Angeles" & month_of_eligibility %in% c(before, after))%>%
+  summarise(total=sum(total_eligibles, na.rm=TRUE)) # same
+
+total_lang_lac <- medical_lang_raw%>%
+  filter(county=="Los Angeles" & month_of_eligibility %in% c(before, after))%>%
+  summarise(total=sum(total_eligibles, na.rm=TRUE)) # same
 
 # Time bench marks from EQB: 
 # Before HR 1 benchmark: June 2025
@@ -90,14 +89,12 @@ total_lang_lac<-medical_lang_raw%>%
 # Lets see if those ranges of months/dates exist in the data
 
 table(medical_race_raw$month_of_eligibility) # yes I see data for 2025 and 2026 June/July. But for some reason ONLY October 2025 is missing...
-
 table(medical_lang_raw$month_of_eligibility) # missing here too
 table(medical_aid_raw$month_of_eligibility) # missing here too
 
 # Methodology decision (also written in QA doc): Because Medi-Cal enrollment in general does not to be very seasonal, based on enrollment mapped quarterly from 2012-2026 here: https://www.chcf.org/medi-cal-enrollment-tracker/?__cf_chl_tk=m6KSwdY9YPwajvB51aKhJNNg93R3CSKvRXpLu7SgEMA-1794865612-1.0.1.1-qzn.Um1gXbwHmwfqqAykoa0nSQQ4pC6tO33moTcbVQk
 # I feel OK with moving up the 'later' comparison date so that the 'before' and 'after' months are not the same. 
 # This way we are measuring more 'after' HR 1
-
 
 # Analysis: Total Medi-Cal enrollment -----------------------
 
@@ -198,7 +195,7 @@ column_comments <- c(
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
 
-# Analyis:  Medi-Cal enrollment by aid category -----------------------
+# Analysis:  Medi-Cal enrollment by aid category -----------------------
 
 # To account for the fact that enrollment by aid changes is also driven by changes in overall Medi-Cal enrollment
 # It makes sense to compare the rate of enrollment by aid across our before and after years
@@ -1216,35 +1213,39 @@ column_comments <- column_comments <- c(
 
 add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
 
-# RACE ANALYSIS: HANDING OFF TO ALICIA: NOT READY FOR QA YET 11/18/26----------------------
+# Analysis: Medi-Cal enrollment by race category ----------------------
 
-# Create separate relational table for medi-cal monthly enrollment and percent change between June 2025 and June 2026 by race
+# Create separate relational table for medi-cal monthly enrollment and
+# percentage point difference between June 2025 and October 2026 by race
+before_col<-gsub("-", "_", before) # June 2025
+after_col<-gsub("-", "_", after) # October 2026
 
-race_enrollment_june25<- medical_race_raw %>%
-  filter(month_of_eligibility %in% c("2026-06", before)) %>%
+race_enrollment_oct26<- medical_race_raw %>%
+  filter(month_of_eligibility %in% c(after, before)) %>%
   group_by(month_of_eligibility, county, ethnicity) %>%
   summarise(
     count = sum(total_eligibles, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   group_by(month_of_eligibility, county) %>%
-  mutate(total = sum(count)) %>%
+  mutate(total = sum(count, na.rm = TRUE),
+         rate = count/total*100) %>%
   ungroup()%>%
-  # NOTE I am still researching whether or not these ethnicity categories are not inclusive of Latinx. No definitive answer yet. Reached out to DHCS and can come back and adjust labels when I get more information
-  
-  mutate(ethnicity_re=ifelse(ethnicity %in% "AI/AN", "nh_aian",
-                                    ifelse(ethnicity %in% "ASIAN", "nh_asian",
-                                           ifelse(ethnicity %in% "BLACK", "nh_black",
-                                                  ifelse(ethnicity %in% "HISPANIC", "latinx",
-                                                         ifelse(ethnicity %in% "NOT REPORTED", "unreported",
-                                                                ifelse(ethnicity %in% "WHITE", "nh_white", 
-                                                                       "statewide")))))))%>%
+  # Deciding that these ethnicity categories are NOT inclusive of Latinx
+  mutate(ethnicity_re = case_when(
+    ethnicity == "AI/AN"        ~ "nh_aian",
+    ethnicity == "ASIAN"        ~ "nh_asian",
+    ethnicity == "BLACK"        ~ "nh_black",
+    ethnicity == "HISPANIC"     ~ "latinx",
+    ethnicity == "NOT REPORTED" ~ "unreported",
+    ethnicity == "WHITE"        ~ "nh_white",
+    TRUE                        ~ "statewide"))%>%
 # pivot table wide
   pivot_wider(
     id_cols = county,
     names_from = c(ethnicity_re, month_of_eligibility),
-    values_from = count,
-    names_glue = "{ethnicity_re}_{month_of_eligibility}",
+    values_from = rate,
+    names_glue = "{ethnicity_re}_rate_{month_of_eligibility}",
     values_fill = 0)%>%
 
   rename_with(~ gsub("-", "_", .x)) %>%  # clean up column names
@@ -1252,41 +1253,104 @@ race_enrollment_june25<- medical_race_raw %>%
   group_by(county)%>%
   mutate(
     across(
-      ends_with("_2025_06"),
+      ends_with(before_col),
       ~ {
-        col_2026 <- sub("2025_06$", "2026_10", cur_column())
-        
-        if_else(
-          .x == 0,
-          NA_real_,
-          (get(col_2026) - .x) / .x * 100
-        )
+          col_2026 <- sub(before_col, after_col, cur_column())
+          (get(col_2026) - .x) 
+          
       },
-      .names = "{sub('_2025_06$', '', .col)}_pct_change"
-    )
-  )
-
+      .names = "{sub(paste0('_', before_col, '$'), '', .col)}_diff")
+    )%>%
+  ungroup()
+  
 
 # Check the calculation worked: values match, looks good!
 
-check<-race_enrollment_june25%>%
+check<-race_enrollment_oct26%>%
   filter(county=="San Diego")%>%
-  mutate(latinx_qa=(latinx_2026_10-latinx_2025_06)/latinx_2025_06*100)%>%
-  select(latinx_qa, latinx_pct_change)
+  mutate(latinx_qa= latinx_rate_2026_10-latinx_rate_2025_06)%>%
+  select(latinx_qa, latinx_rate_diff)
 
 rm(check)
 
 
 # left join county_geoid values and clean up columns to match naming conventions
 
-race_enrollment_june25<-race_enrollment_june25%>%
+race_enrollment_oct26<-race_enrollment_oct26%>%
   left_join(ca_counties%>%select(GEOID, NAME, geometry), by=c("county"="NAME"))%>%
   mutate(geolevel="county")%>%
   rename("county_name"="county",
          "county_geoid"="GEOID")%>%
   select(county_geoid, county_name, geolevel, everything())%>%
-  select(-geometry)%>% # Remove county geoms
+  select(-geometry, -starts_with("statewide"))%>% # Remove county geoms
   ungroup()
 
 # check resulting table is a  df -- good
-class(race_enrollment_june25)
+class(race_enrollment_oct26)
+
+
+###### Push Medi-cal race enrollment table to postgres ######
+
+df<-race_enrollment_june25 # assign as 'df'
+
+# make sure no trailing spaces anywhere
+
+names(df) <- gsub(" ", "", names(df))
+
+df <- df %>%
+  mutate(across(where(is.character), ~ replace(.x, .x == " ", "")))
+
+# set column types
+
+charvect <- rep("numeric", ncol(df))
+charvect <- replace(charvect, c(1, 2, 3), c("varchar"))
+names(charvect) <- names(df)
+
+# set table info
+
+table_name <- "rel_medical_enrollment_race_county_jan27"
+schema <- "dashboard"
+indicator <- "Enrollment rates in the Medi-Cal program by race in June 2025,
+October 2026, and the percentage point difference in enrollment rates between October 2026 and June 2025.
+Original data source: https://data.chhs.ca.gov/dataset/medi-cal-certified-eligibles-with-demographics-by-month"
+source <- "R script:W:\\Project\\ECI\\HR 1 Tracker\\Github\\JZ\\HR1_Tracker\\Analysis\\rel_medical_totenrollment_county_jan27.R"
+qa_filepath <- "W:\\Project\\ECI\\HR 1 Tracker\\Documentation\\QA_rel_medical_enrollment.docx"
+table_comment <- paste0(indicator, source)
+
+# push to postgres
+
+dbWriteTable( con,
+              DBI::Id(schema = schema, table = table_name),
+              df,
+              overwrite = TRUE, row.names = FALSE,
+              field.types = charvect)
+
+# add meta data
+
+column_names <- colnames(df) # Get column names
+
+column_comments <- c(
+  'county geoid',
+  'county name',
+  'geolevel',
+  'Enrollment rate by county for June 2025 for AIAN',
+  'Enrollment rate by county for June 2025 for Asian',
+  'Enrollment rate by county for June 2025 for Black',
+  'Enrollment rate by county for June 2025 for Latinx',
+  'Enrollment rate by county for June 2025 for unreported race/ethnicity',
+  'Enrollment rate by county for June 2025 for White',
+  'Enrollment rate by county for October 2026 for AIAN',
+  'Enrollment rate by county for October 2026 for Asian',
+  'Enrollment rate by county for October 2026 for Black',
+  'Enrollment rate by county for October 2026 for Latinx',
+  'Enrollment rate by county for October 2026 for unreported race/ethnicity',
+  'Enrollment rate by county for October 2026 for White',
+  'Difference in enrollment rate for AIAN between October 2026 and June 2025',
+  'Difference in enrollment rate for Asian between October 2026 and June 2025',
+  'Difference in enrollment rate for Black between October 2026 and June 2025',
+  'Difference in enrollment rate for Latinx between October 2026 and June 2025',
+  'Difference in enrollment rate for unreported race/ethnicity between October 2026 and June 2025',
+  'Difference in enrollment rate for White between October 2026 and June 2025'
+)
+
+add_table_comments(con, schema, table_name, indicator, source, qa_filepath, column_names, column_comments)
