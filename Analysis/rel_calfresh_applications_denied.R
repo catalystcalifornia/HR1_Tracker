@@ -28,6 +28,9 @@ calfresh_25_26 <- calfresh_raw %>%
                               calendar_year == 2026 & month == "August" ~ after)) %>%
   filter(month_year %in% c(before, after))
 
+# check that worked -- looks good
+table(calfresh_25_26$month_year)
+
 # Pulling CA county geoids, names
 ca_counties <- dbGetQuery(con_shared, "SELECT statefp, countyfp, name AS county_name FROM geographies_ca.cb_2023_06_county_500k")
 counties <- ca_counties %>%
@@ -41,6 +44,12 @@ counties <- ca_counties %>%
 # Column names built from the time period variables
 before_col <- paste0("calfresh_denial_rate_", before)
 after_col  <- paste0("calfresh_denial_rate_", after)
+
+# check those look good -- looks good
+print(before_col)
+print(after_col)
+
+# Calculate rates and perentage point differences between rates
 
 applications_denied_rate <- calfresh_25_26 %>%
   select(county, month_year, applications_denied, applications_received) %>%
@@ -108,6 +117,11 @@ add_table_comments(con, schema, table_name, indicator, source, qa_filepath, colu
 before_col <- paste0("calfresh_ineligible_denial_rate_", before)
 after_col  <- paste0("calfresh_ineligible_denial_rate_", after)
 
+# check those look good
+print(before_col)
+print(after_col)
+
+# Proceed to calcs
 applications_denied_reason_ineligible_rate <- calfresh_25_26 %>%
   select(county, month_year, applications_denied, denial_reason_ineligible) %>%
   mutate(ineligible_denial_rate = if_else(
@@ -173,6 +187,12 @@ add_table_comments(con, schema, table_name, indicator, source, qa_filepath, colu
 before_col <- paste0("calfresh_applications_received_", before)
 after_col  <- paste0("calfresh_applications_received_", after)
 
+# Check these look good
+print(before_col)
+print(after_col)
+
+# Procede to calcs
+
 applications_received <- calfresh_25_26 %>%
   select(county, month_year, applications_received) %>%
   pivot_wider(
@@ -193,7 +213,7 @@ summary(rel_applications_received$calfresh_applications_received_pct_change)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
 # -36.364  -4.230   1.064   8.861   8.208 192.456       2
 
-# std dev = 32.88689
+# std dev =  33.18228
 sd(rel_applications_received$calfresh_applications_received_pct_change, na.rm=TRUE)
 
 #### Push to Postgres ----
@@ -204,7 +224,7 @@ table_name <- "rel_calfresh_applications_received_county_jan27"
 indicator <- "A table with the June 2025 and August 2026 number of CalFresh applications received 
 by county and the percent change in the numbers of applications received. Statewide, 
 the percent change is 5.97 and across counties, the standard 
-deviation is 32.88.
+deviation is 33.18.
 
 Summary statistics for the percent change across counties are
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NAs 
