@@ -50,19 +50,19 @@ applications_denied_rate <- calfresh_25_26 %>%
     names_from = month_year,
     values_from = c(applications_denied, applications_received, denial_rate),
     names_glue = "calfresh_{.value}_{month_year}") %>%
-  mutate(calfresh_denial_rate_pct_pt_change = .data[[after_col]] - .data[[before_col]])
+  mutate(calfresh_denial_rate_diff = .data[[after_col]] - .data[[before_col]])
 
 # Joining CalFresh data with county data
 rel_applications_denied_rate<- counties %>%
   left_join(applications_denied_rate, by = c("county_name" = "county")) %>%
   mutate(geolevel = "county", .after = county_name) %>%
-  arrange(calfresh_denial_rate_pct_pt_change)
+  arrange(calfresh_denial_rate_diff)
 
-summary(rel_applications_denied_rate$calfresh_denial_rate_pct_pt_change) 
+summary(rel_applications_denied_rate$calfresh_denial_rate_diff) 
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
 # -39.655 -10.981  -6.350  -7.820  -3.618  15.811       2
 
-sd(rel_applications_denied_rate$calfresh_denial_rate_pct_pt_change, na.rm = TRUE) 
+sd(rel_applications_denied_rate$calfresh_denial_rate_diff, na.rm = TRUE) 
 # std dev = 9.275265
 
 #### Push to Postgres ----
@@ -118,20 +118,20 @@ applications_denied_reason_ineligible_rate <- calfresh_25_26 %>%
     names_from = month_year,
     values_from = c(denial_reason_ineligible, applications_denied, ineligible_denial_rate),
     names_glue = "calfresh_{.value}_{month_year}") %>%
-  mutate(calfresh_ineligible_denial_rate_pct_pt_change = .data[[after_col]] - .data[[before_col]])
+  mutate(calfresh_ineligible_denial_rate_diff = .data[[after_col]] - .data[[before_col]])
 
 # Joining CalFresh data with county data
 rel_applications_denied_reason_ineligible_rate <- counties %>%
   left_join(applications_denied_reason_ineligible_rate, by = c("county_name" = "county")) %>%
   mutate(geolevel = "county", .after = county_name) %>%
-  arrange(calfresh_ineligible_denial_rate_pct_pt_change)
+  arrange(calfresh_ineligible_denial_rate_diff)
 
-summary(rel_applications_denied_reason_ineligible_rate$calfresh_ineligible_denial_rate_pct_pt_change)
+summary(rel_applications_denied_reason_ineligible_rate$calfresh_ineligible_denial_rate_diff)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
 # -4.0000 -0.6351  0.0000  0.1721  0.6734  8.8616       1 
 
 # std dev = 1.85233
-sd(rel_applications_denied_reason_ineligible_rate$calfresh_ineligible_denial_rate_pct_pt_change, na.rm=TRUE)
+sd(rel_applications_denied_reason_ineligible_rate$calfresh_ineligible_denial_rate_diff, na.rm=TRUE)
 
 #### Push to Postgres ----
 
