@@ -560,11 +560,227 @@ df %>%
 ```
 
 
-### Medi-Cal Enrollment Total Enrollment: By Race
+### Medi-Cal Enrollment Total Enrollment: By Race {.tabset}
+
+* Question: Do we want to explore an option where we combine all the BIPOC groups as a BIPOC category
+
+#### Latinx Enrollees
+
 
 ```{r}
 
+# Step 1: Read in relational table
+
+df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_race_county_jan27")
+
+# Step 2: Pre-define variable of interest you are visualizing / exploring for findings
+
+variable <- "latinx_rate_diff"
+
+# Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
+
+top5 <- df %>%
+  slice_max(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+bottom5 <- df %>%
+  slice_min(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), "%)"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+# Step 4: Calculate summary stats for measurement of interest: percent change in enrollment
+
+stats <- df %>%
+  summarise(
+    min = min(.data[[variable]], na.rm = TRUE),
+    q1 = quantile(.data[[variable]], 0.25, na.rm = TRUE),
+    median = median(.data[[variable]], na.rm = TRUE),
+    mean = mean(.data[[variable]], na.rm = TRUE),
+    q3 = quantile(.data[[variable]], 0.75, na.rm = TRUE),
+    max = max(.data[[variable]], na.rm = TRUE))
+
+# format stats nicely for inline findings text 
+
+stats_fmt <- stats %>%
+  mutate(
+    across(
+      c(min, q1, median, mean, q3, max),
+      ~ sprintf("%.2f%%", .x)
+    )
+  )
+
+
+
 ```
+
+* The 5 counties with the __highest rate difference__ in enrollment were: `r top5`.
+* The 5 counties with the __lowest rate change__ in enrollment were: `r bottom5`.
+
+*Summary statistics*
+
+* Across California counties, the average enrollment rate differences in Medi-cal for Latinx enrollees was `r stats_fmt$mean`, and the median rate difference was `r stats_fmt$median`.
+* County-level rate difference ranged from `r stats_fmt$min` to `r stats_fmt$max`.
+* The middle 50% of counties experienced enrollment rate differences between `r stats_fmt$q1` and `r stats_fmt$q3`.
+* Approximately 25% of counties experienced enrollment rate differences of `r stats_fmt$q1` or lower.
+* Approximately 75% of counties experienced enrollment rate differences of `r stats_fmt$q3` or lower.
+
+```{r}
+# Graph (I used conditional coloring for green == positive values, red == negative values) 
+
+df %>% 
+   hchart(
+    type = "bar", 
+    hcaes(y = round(.data[[variable]], 2), 
+          x = county_name),
+
+    color = "#2E8B57",
+    negativeColor = "#C0392B",
+
+    tooltip = list(
+      pointFormat = "Rate of Latinx Medi-Cal Enrollment 2025: {point.latinx_rate_2025_06:.0f}%<br>
+      Rate of Latinx Medi-Cal Enrollment 2026: {point.latinx_rate_2026_10:.0f}%")) %>% ## make sure to change tooltip to match what variable you want to pull 
+  hc_tooltip(crosshairs = TRUE) %>% 
+  
+  hc_xAxis( title = list(text = ""),
+            labels=list(style=list(fontSize='15px'))) %>% 
+  
+  hc_yAxis( title = list(text = ""),
+            labels = list(format = "{value}")) %>%  
+  
+  # title elements: make sure to change title text accordingly
+  hc_title(
+    text = paste0("Difference in Medi-Cal Enrollment Rate for Latinx Enrollees"), 
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='30px')
+  ) %>%
+    # subtitle elements: make sure to change subtitle text accordingly
+  hc_subtitle(
+    text = paste0("Difference in enrollment rates for Latinx enrollees from ",before," to ",after),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='15px')
+  ) 
+
+
+
+```
+
+
+#### NH-White Enrollees
+
+```{r}
+
+# Step 1: Read in relational table
+
+df<-dbGetQuery(con, "SELECT * FROM dashboard.rel_medical_enrollment_race_county_jan27")
+
+# Step 2: Pre-define variable of interest you are visualizing / exploring for findings
+
+variable <- "nh_white_rate_diff"
+
+# Step 3: Isolate just the top 5 and bottom 5 counties for your measurement to add to findings
+
+top5 <- df %>%
+  slice_max(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), ")"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+bottom5 <- df %>%
+  slice_min(.data[[variable]], n = 5, with_ties = FALSE) %>%
+  mutate(label = paste0(
+    county_name, " (",
+    round(.data[[variable]], 2), ")"
+  )) %>%
+  pull(label) %>%
+  paste(collapse = ", ")
+
+# Step 4: Calculate summary stats for measurement of interest: percent change in enrollment
+
+stats <- df %>%
+  summarise(
+    min = min(.data[[variable]], na.rm = TRUE),
+    q1 = quantile(.data[[variable]], 0.25, na.rm = TRUE),
+    median = median(.data[[variable]], na.rm = TRUE),
+    mean = mean(.data[[variable]], na.rm = TRUE),
+    q3 = quantile(.data[[variable]], 0.75, na.rm = TRUE),
+    max = max(.data[[variable]], na.rm = TRUE))
+
+# format stats nicely for inline findings text 
+
+stats_fmt <- stats %>%
+  mutate(
+    across(
+      c(min, q1, median, mean, q3, max),
+      ~ sprintf("%.2f%%", .x)
+    )
+  )
+
+
+
+```
+
+* The 5 counties with the __highest rate difference__ in enrollment were: `r top5`.
+* The 5 counties with the __lowest rate change__ in enrollment were: `r bottom5`.
+
+*Summary statistics*
+
+* Across California counties, the average enrollment rate differences in Medi-cal for NH White enrollees was `r stats_fmt$mean`, and the median rate difference was `r stats_fmt$median`.
+* County-level rate difference ranged from `r stats_fmt$min` to `r stats_fmt$max`.
+* The middle 50% of counties experienced enrollment rate differences between `r stats_fmt$q1` and `r stats_fmt$q3`.
+* Approximately 25% of counties experienced enrollment rate differences of `r stats_fmt$q1` or lower.
+* Approximately 75% of counties experienced enrollment rate differences of `r stats_fmt$q3` or lower.
+
+```{r}
+# Graph (I used conditional coloring for green == positive values, red == negative values) 
+
+df %>% 
+   hchart(
+    type = "bar", 
+    hcaes(y = round(.data[[variable]], 2), 
+          x = county_name),
+
+    color = "#2E8B57",
+    negativeColor = "#C0392B",
+
+    tooltip = list(
+      pointFormat = "Rate of NH-White Medi-Cal Enrollment 2025: {point.nh_white_rate_2025_06:.0f}%<br>
+      Rate of NH-White Medi-Cal Enrollment 2026: {point.nh_white_rate_2026_10:.0f}%")) %>% ## make sure to change tooltip to match what variable you want to pull 
+  hc_tooltip(crosshairs = TRUE) %>% 
+  
+  hc_xAxis( title = list(text = ""),
+            labels=list(style=list(fontSize='15px'))) %>% 
+  
+  hc_yAxis( title = list(text = ""),
+            labels = list(format = "{value}")) %>%  
+  
+  # title elements: make sure to change title text accordingly
+  hc_title(
+    text = paste0("Difference in Medi-Cal Enrollment Rate for NH-White Enrollees"), 
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='30px')
+  ) %>%
+    # subtitle elements: make sure to change subtitle text accordingly
+  hc_subtitle(
+    text = paste0("Difference in enrollment rates for NH-White enrollees from ",before," to ",after),
+    align = "left", 
+    style = list(useHTML = TRUE, fontWeight = "bold", fontSize='15px')
+  ) 
+
+
+```
+
 
 ### Medi-Cal Enrollment: By Aid Category
 
