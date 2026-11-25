@@ -30,16 +30,26 @@ calfresh_25_26 <- calfresh_raw %>%
   filter(month_year %in% c(before, after))
 
 ########### Dollars per enrollee ----
-# The Consumer Price Index's food at home prices rose 2.7% from June 2025 to June 2026
-# https://www.bls.gov/opub/ted/2026/consumer-prices-up-3-5-percent-over-the-year-ended-june-2026.htm
-food_inflation <- 0.027 
+# The Consumer Price Index's food at home prices rose 2.7% from June 2025 to August 2026
+# Consumer Price Index (CPI-U) for Food at Home
+# U.S. city average, not seasonally adjusted
+# Series ID: CUUR0000SAF11
+# Source: https://fred.stlouisfed.org/data/CUUR0000SAF11
+
+cpi_before <- 313.028 # June 2025 is our before value
+cpi_after <- 321.500 # August 2026 is our after value
+
+# Cumulative food inflation from June 2025 to August 2026
+food_inflation <- (cpi_after / cpi_before) - 1
+
+print(food_inflation) #  0.02706467 (2.7065%)
 
 # Column names built from the time period variables
 before_col <- paste0("calfresh_dollars_per_enrollee_", before)
 after_col  <- paste0("calfresh_dollars_per_enrollee_", after)
 before_col_real   <- paste0("calfresh_dollars_per_enrollee_real_", before)
 
-# Data on dollars per enrollee in CalFresh and percent change from June 2025 to 2026
+# Data on dollars per enrollee in CalFresh and percent change from June 2025 to August 2026
 dollars_per_enrollee <- calfresh_25_26 %>%
   mutate(calfresh_dollars_per_enrollee = total_issuances / cal_fresh_persons) %>%
   pivot_wider(
@@ -78,10 +88,10 @@ summary(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change_nom
 # When adjusted for inflation, the percent change in $/enrollee is MORE negative
 summary(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change) 
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
-# -7.4981 -3.7167 -2.6254 -2.7821 -1.8892  0.7952 
+# -7.5039 -3.7228 -2.6315 -2.7882 -1.8953  0.7889 
 
 sd(dollars_per_enrollee_county$calfresh_dollars_per_enrollee_pct_change)
-# std dev = 1.501287
+# std dev = 1.501193
 
 final_df <- dollars_per_enrollee_county %>%
   select(county_geoid:geolevel, 
@@ -99,17 +109,17 @@ number of CalFresh persons (not households). Also includes the difference
 in dollars per enrollee between August 2026 and June 2025.
 Note that June 2025 dollars per enrollee are adjusted for inflation, specifically using the 
 Consumer Price Index food at home index. For reference, the Consumer Price 
-Index food at home prices rose 2.7% from June 2025 to June 2026.
+Index food at home prices rose 2.7% from June 2025 to August 2026.
 
-Statewide, the percent change is -2.73 and across counties, the standard deviation 
+Statewide, the percent change is -2.74 and across counties, the standard deviation 
 is 1.50.
 
 Summary statistics for the percent change across counties are
    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
--7.4981 -3.7167 -2.6254 -2.7821 -1.8892  0.7952 
+-7.5039 -3.7228 -2.6315 -2.7882 -1.8953  0.7889
 
 Data from California Dept. of Social Services https://www.cdss.ca.gov/inforesources/data-portal/research-and-data/calfresh-data-dashboard 
-and Consumer Price Index data from https://www.bls.gov/opub/ted/2026/consumer-prices-up-3-5-percent-over-the-year-ended-june-2026.htm"
+and Consumer Price Index data from https://www.bls.gov/opub/ted/2026/consumer-prices-up-3-5-percent-over-the-year-ended-june-2026.htm and https://fred.stlouisfed.org/data/CUUR0000SAF11"
 source <- "Script: W:/Project/ECI/HR 1 Tracker/Github/AV/HR1_Tracker/Analysis/rel_calfresh_dollars_per_enrollee.R "
 qa_filepath <- "W:/Project/ECI/HR 1 Tracker/Documentation/QA_rel_calfresh_dollars_per_enrollee.docx"
 
