@@ -27,6 +27,12 @@ drv <- dbDriver("PostgreSQL")
 
 medical_race_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_eligibles_race_age_county_2010_26")
 
+# what is the range of data we have:
+medical_race_raw%>%
+  select(month_of_eligibility)%>%
+  View()
+
+# Explore different time periods 
 # get medi-cal total enrollment not by race
 
 medical_enrollment<-medical_race_raw%>%

@@ -1,0 +1,597 @@
+---
+title: "Exploring Medi-Cal Regression Modeling"
+subtitle: "Internal Use Only"
+output:
+  html_document:
+    css: "W:\\RDA Team\\R\\cc_brandguide.css"
+    toc: true
+    toc_depth: 4
+    toc_float: true
+---
+
+| Modeling Period | Advantage | Limitation |
+|:---|:---|:---|
+| Jan 2010 – June 2025 | Long historical record | Multiple structural changes |
+| Jan 2024 – June 2025 | More recent enrollment environment | May capture unwinding and expansion effects |
+| July 2024 – June 2025 | Most recent 12-month trend | Shorter modeling period |
+
+Start with January 2024 and compare the results against the other periods as a sensitivity analysis.
+
+```{r, include=FALSE}
+
+knitr::opts_chunk$set(warning = FALSE,message = FALSE,echo=FALSE)
+
+# Set up workspace-----------------------
+
+# Connect to postgres
+library(dplyr)
+library(RPostgres)
+library(tidyr)
+library(tidycensus)
+library(readxl)
+library(stringr)
+library(sf)
+library(tigris)
+library(rpostgis)
+library(purrr)
+library(readr)
+library(ggplot2)
+library(lubridate)
+
+# Connect to postgres
+
+source("W:\\RDA Team\\R\\credentials_source.R")
+
+con <- connect_to_db("eqb_hr1_tracker")
+con_shared<-connect_to_db("rda_shared_data")
+drv <- dbDriver("PostgreSQL")
+
+# Read in tables from postgres:
+
+medical_race_raw<-dbGetQuery(con_shared, "SELECT * FROM health.cchs_medical_eligibles_race_age_county_2010_26")
+
+# what is the range of data we have: Jan 2010 - October 2026. We know October 2025 is misisng.
+
+medical_race_raw%>%
+  select(month_of_eligibility)%>%
+  View()
+
+# Get total enrollment not by race:
+
+medical_enrollment<-medical_race_raw%>%
+  group_by(month_of_eligibility, county)%>%
+  summarise(total=sum(total_eligibles))%>%
+  ungroup()
+
+# Set baseline date variables
+
+baseline_date <- as.Date("2025-06-01") # same baseline used in all our analysis tables
+model_start <- as.Date("2024-01-01") # start date 
+end_date <- as.Date("2026-10-01") # end date: most recent month/year of data
+
+# Prep df for regressions-------------------------
+
+enrollment_df <- medical_enrollment %>%
+  mutate(month = ym(month_of_eligibility)) %>% # convert column to ym date format
+  select(county, month, enrollment = total) %>% # select columns of interest
+  group_by(county) %>%
+  complete(month = seq.Date(as.Date("2010-01-01"),end_date, by = "month")) %>% # creates a row for every month for every county, including October 2025, with NA for missing enrollment values. This way the month/years that have NA values are not completely missing
+  arrange(month) %>%
+  ungroup() %>%
+  mutate(
+    time = (year(month) - 2010) * 12 + month(month) - 1) # number of months that have elapsed since January 2010, which is earliest month/year in our data. We want the calendar dates to be a continuous numeric variable that can be used in a regression model to estimate how Medi-Cal enrollment changes over time.
+
+```
+
+# Method 1: Baseline-anchored linear trend projection
+
+I am using using a regression to estimate the historical rate of change in enrollment over time. I am taking the slope of the regression line and anchoring it to the actual June 2025 enrollment count. From there I am projecting what enrollment should be after June 2025 using the formula?: baseline enrollment number +  (historical rate of enrollment change) x (months elapsed since baseline time)
+
+For this we define the baseline time as: June 2025 
+
+```{r}
+
+# PROJECTION METHOD 1: Historical rate of change----------------------------------
+
+df <- enrollment_df %>%
+  group_by(county) %>% # model for each county separately
+  group_modify(~ {
+
+    # Select the window of historical enrollment data to base trends off of, or the 'before HR 1' window of time
+    pre_data <- .x %>%
+      filter(
+        month >= model_start,
+        month <= baseline_date,
+        !is.na(enrollment) # excluse NA enrollment data
+      )
+
+    # Get actual enrollment at baseline:  number of Medi-Cal enrollees in June 2025 for each county
+    
+    baseline <- .x %>%
+      filter(month == baseline_date) %>%
+      pull(enrollment)
+
+    # Skip counties with insufficient data
+    if (nrow(pre_data) < 12 || # Does the county have fewer than 12 months of valid enrollment values
+        length(baseline) != 1 || # Is there not exactly one enrollment observation for June 2025 (baseline)?
+        anyNA(baseline)) { # 	Is the June 2025 (baseline) enrollment count missing?
+
+      return(.x %>%
+        mutate(
+          projected_enrollment = NA_real_,
+          enrollment_gap = NA_real_,
+          enrollment_gap_pct = NA_real_
+        ))
+    }
+
+    # Now create simple linear regression to identify the straight line that best describes the relationship between time and Medi-Cal enrollment during the historical period.
+    
+    pre_model <- lm(
+      enrollment ~ time,
+      data = pre_data
+    )
+
+    # Extract monthly enrollment trend or the slope of the linear regression line: This will tell us how many enrollees the county historically gained or lost per month, on average, according to the fitted linear trend.
+  
+      monthly_trend <- unname(coef(pre_model)["time"])
+
+    # Get baseline time: How many months passed between Jan 2010 and the baseline time (June 2025) 
+    baseline_time <- .x %>%
+      filter(month == baseline_date) %>%
+      pull(time)
+
+    # Project enrollment starting at June 2025:
+    # the formula is essentially: baseline enrollment +  monthly trend (the slope of the linear regression) * months since baseline) to essentially say, using the rate generated from our linear model, and we apply that rate to subsequent time after our baseline, what would projected enrollment be? 
+    
+    .x %>%
+      mutate(
+        projected_enrollment = if_else(
+          month >= baseline_date,
+          baseline + monthly_trend * (time - baseline_time),
+          NA_real_
+        ),
+
+  # Then calculate gaps between projected enrollment and the real enrollment data
+        enrollment_gap =
+          enrollment - projected_enrollment,
+# enrollment gap percentage is better because takes into account diff population sizes for the counties
+        enrollment_gap_pct =
+          100 * enrollment_gap / projected_enrollment
+      )
+
+  }) %>%
+  ungroup()
+
+
+```
+
+Below is the projection visualized just for Los Angeles County. 
+
+```{r}
+
+# METHOD 1: Visualize for LA county only: 
+
+df %>%
+  filter(
+    county == "Los Angeles",
+    month >= as.Date("2024-01-01")
+  ) %>%
+  ggplot(aes(x = month)) +
+
+  geom_line(
+    aes(y = enrollment, color = "Actual enrollment"),
+    linewidth = 1
+  ) +
+
+  geom_line(
+    aes(
+      y = projected_enrollment,
+      color = "Projected enrollment"
+    ),
+    linewidth = 1,
+    linetype = "dashed",
+    na.rm = TRUE
+  ) +
+
+  geom_vline(
+    xintercept = baseline_date,
+    linetype = "dotted",
+    color = "gray40"
+  ) +
+
+  scale_color_manual(
+    values = c(
+      "Actual enrollment" = "#2166AC",
+      "Projected enrollment" = "#D97706"
+    )
+  ) +
+
+  scale_y_continuous(
+    labels = scales::label_comma()
+  ) +
+
+  scale_x_date(
+    date_breaks = "3 months",
+    date_labels = "%b %Y"
+  ) +
+
+  labs(
+    title = "Medi-Cal Enrollment in Los Angeles County",
+    subtitle = "Actual enrollment compared to projected enrollment based on historical trends",
+    x = NULL,
+    y = "Total Medi-Cal enrollment",
+    color = NULL,
+    caption = "Baseline: June 2025. October 2025 data are unavailable."
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
+
+```
+
+Below is a visualization of the projection applied to all of California.
+
+```{r}
+# Aggregate county enrollments so we have statewide enrollment
+
+statewide_df <- df %>%
+  filter(county=="STATEWIDE")%>%
+  mutate(
+    enrollment_gap =
+      enrollment - projected_enrollment,
+
+    enrollment_gap_pct =
+      100 * enrollment_gap / projected_enrollment
+  )
+
+# Visualize
+
+statewide_df %>%
+  filter(month >= as.Date("2024-01-01")) %>%
+  ggplot(aes(x = month)) +
+
+  geom_line(
+    aes(y = enrollment, color = "Actual enrollment"),
+    linewidth = 1
+  ) +
+
+  geom_line(
+    aes(
+      y = projected_enrollment,
+      color = "Projected enrollment"
+    ),
+    linewidth = 1,
+    linetype = "dashed",
+    na.rm = TRUE
+  ) +
+
+  geom_vline(
+    xintercept = baseline_date,
+    linetype = "dotted"
+  ) +
+
+  scale_color_manual(
+    values = c(
+      "Actual enrollment" = "#2166AC",
+      "Projected enrollment" = "#D97706"
+    )
+  ) +
+
+  scale_y_continuous(
+    labels = scales::label_number(
+      scale = 1e-6,
+      suffix = "M"
+    )
+  ) +
+
+  scale_x_date(
+    date_breaks = "3 months",
+    date_labels = "%b %Y"
+  ) +
+
+  labs(
+    title = "California Medi-Cal Enrollment",
+    subtitle = "Actual versus projected enrollment since June 2025",
+    x = NULL,
+    y = "Total enrollment",
+    color = NULL
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+# Method 2: Using predicted values from fitted regression model
+
+Calculate enrollment predicted values using regressoin model (this is like the the method we use for our RIPA outlier analyses)
+
+```{r}
+
+df <- enrollment_df %>%
+  group_by(county) %>%
+  group_modify(~ {
+
+    # Select historical data for training the model
+    pre_data <- .x %>%
+      filter(
+        month >= model_start,
+        month <= baseline_date,
+        !is.na(enrollment)
+      )
+
+    # Skip counties with insufficient historical data
+    if (nrow(pre_data) < 12) {
+
+      return(.x %>%
+        mutate(
+          projected_enrollment = NA_real_,
+          enrollment_gap = NA_real_,
+          enrollment_gap_pct = NA_real_
+        ))
+    }
+
+    # Fit linear regression using historical data
+    pre_model <- lm(
+      enrollment ~ time,
+      data = pre_data
+    )
+
+    # Predict enrollment using the fitted regression model
+    .x %>%
+      mutate(
+        projected_enrollment = if_else(
+          month >= baseline_date,
+          as.numeric(predict(pre_model, newdata = .x)),
+          NA_real_
+        ),
+
+        enrollment_gap =
+          enrollment - projected_enrollment,
+
+        enrollment_gap_pct =
+          100 * enrollment_gap / projected_enrollment
+      )
+
+  }) %>%
+  ungroup()
+
+
+# Pull out diagnostics of the model for each county---------------------
+
+library(broom)
+
+model_diagnostics <- enrollment_df %>%
+  filter(
+    month >= model_start,
+    month <= baseline_date,
+    !is.na(enrollment)
+  ) %>%
+  group_by(county) %>%
+  filter(n() >= 12) %>%
+  group_modify(~ {
+
+    pre_model <- lm(
+      enrollment ~ time,
+      data = .x
+    )
+
+    glance(pre_model) %>%
+      mutate(
+        intercept = unname(coef(pre_model)["(Intercept)"]),
+        monthly_trend = unname(coef(pre_model)["time"])
+      )
+
+  }) %>%
+  ungroup() %>%
+  select(
+    county,
+    nobs,
+    intercept,
+    monthly_trend,
+    r.squared,
+    adj.r.squared,
+    p.value,
+    statistic,
+    sigma,
+    AIC,
+    BIC
+  )
+
+
+View(model_diagnostics)
+
+```
+
+# Combine method 1 and method 2 into one df for one visual
+
+```{r}
+
+df <- enrollment_df %>%
+  group_by(county) %>%
+  group_modify(~ {
+
+    # Select historical training data
+    pre_data <- .x %>%
+      filter(
+        month >= model_start,
+        month <= baseline_date,
+        !is.na(enrollment)
+      )
+
+    # Extract baseline enrollment and time
+    baseline <- .x %>%
+      filter(month == baseline_date) %>%
+      pull(enrollment)
+
+    baseline_time <- .x %>%
+      filter(month == baseline_date) %>%
+      pull(time)
+
+    # Skip counties with insufficient historical data
+    if (nrow(pre_data) < 12) {
+
+      return(.x %>%
+        mutate(
+          fitted_enrollment = NA_real_,
+          projected_enrollment_regression = NA_real_,
+          projected_enrollment_anchored = NA_real_
+        ))
+    }
+
+    # Fit linear regression
+    pre_model <- lm(enrollment ~ time, data = pre_data)
+
+    # Extract historical monthly trend
+    monthly_trend <- unname(coef(pre_model)["time"])
+
+    # Check whether baseline is valid
+    valid_baseline <- length(baseline) == 1 &&
+      !anyNA(baseline) &&
+      length(baseline_time) == 1
+
+    .x %>%
+      mutate(
+
+        # Regression estimates during historical period
+        fitted_enrollment = if_else(
+          month >= model_start & month <= baseline_date,
+          as.numeric(predict(pre_model, newdata = .x)),
+          NA_real_
+        ),
+
+        # Method 2: Direct regression prediction
+        projected_enrollment_regression = if_else(
+          month >= baseline_date,
+          as.numeric(predict(pre_model, newdata = .x)),
+          NA_real_
+        ),
+
+        # Method 1: Baseline-anchored projection
+        projected_enrollment_anchored = if (valid_baseline) {
+          if_else(
+            month >= baseline_date,
+            baseline + monthly_trend * (time - baseline_time),
+            NA_real_
+          )
+        } else {
+          NA_real_
+        }
+
+      )
+
+  }) %>%
+  ungroup() %>%
+  mutate(
+
+    # Enrollment gap using regression prediction
+    enrollment_gap_regression =
+      enrollment - projected_enrollment_regression,
+
+    enrollment_gap_pct_regression =
+      100 * enrollment_gap_regression /
+      projected_enrollment_regression,
+
+    # Enrollment gap using anchored projection
+    enrollment_gap_anchored =
+      enrollment - projected_enrollment_anchored,
+
+    enrollment_gap_pct_anchored =
+      100 * enrollment_gap_anchored /
+      projected_enrollment_anchored
+
+  )
+
+# Visualize everything together
+
+df %>%
+  filter(
+    county == "Los Angeles",
+    month >= model_start
+  ) %>%
+  ggplot(aes(x = month)) +
+
+  geom_line(
+    aes(y = enrollment, color = "Actual enrollment"),
+    linewidth = 1
+  ) +
+
+  geom_line(
+    aes(y = fitted_enrollment, color = "Historical fitted trend"),
+    linewidth = 0.8,
+    na.rm = TRUE
+  ) +
+
+  geom_line(
+    aes(
+      y = projected_enrollment_regression,
+      color = "Regression prediction"
+    ),
+    linewidth = 1,
+    linetype = "dashed",
+    na.rm = TRUE
+  ) +
+
+  geom_line(
+    aes(
+      y = projected_enrollment_anchored,
+      color = "Anchored projection"
+    ),
+    linewidth = 1,
+    linetype = "dashed",
+    na.rm = TRUE
+  ) +
+
+  geom_vline(
+    xintercept = baseline_date,
+    linetype = "dotted"
+  ) +
+
+  scale_color_manual(
+    values = c(
+      "Actual enrollment" = "#2166AC",
+      "Historical fitted trend" = "gray50",
+      "Regression prediction" = "#16A34A",
+      "Anchored projection" = "#D97706"
+    )
+  ) +
+
+  scale_y_continuous(
+    labels = scales::label_comma()
+  ) +
+
+  scale_x_date(
+    date_breaks = "3 months",
+    date_labels = "%b %Y"
+  ) +
+
+  labs(
+    title = "Medi-Cal Enrollment in Los Angeles County",
+    subtitle = "Comparison of enrollment projection methodologies",
+    x = NULL,
+    y = "Total Medi-Cal enrollment",
+    color = NULL,
+    caption = "October 2025 actual enrollment data are unavailable."
+  ) +
+
+  theme_minimal() +
+
+  theme(
+    legend.position = "bottom",
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.grid.minor = element_blank()
+  )
+
+
+```
